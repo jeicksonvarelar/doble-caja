@@ -1,0 +1,2401 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Doble Caja — Control de gastos COP/USD</title>
+<style>
+  :root {
+    --cop-color: #2f6f4f;
+    --cop-soft: #e7f3ec;
+    --usd-color: #2a5a8c;
+    --usd-soft: #e8f0f8;
+    --ink: #1f2421;
+    --paper: #faf8f3;
+    --paper-2: #f1ede3;
+    --line: #d8d3c4;
+    --accent: #c1572d;
+    --danger: #b3433a;
+    --radius: 10px;
+    font-size: 16px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: 'Iowan Old Style', 'Georgia', serif;
+    background: var(--paper);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 24px 18px 80px;
+  }
+
+  header.top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  h1 {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-weight: 700;
+    font-size: 1.5rem;
+    letter-spacing: 0.02em;
+    margin: 0;
+  }
+
+  h1 .dot {
+    color: var(--cop-color);
+  }
+  h1 .dot2 {
+    color: var(--usd-color);
+  }
+
+  .subtitle {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.78rem;
+    color: #7a766a;
+    margin: 0 0 22px;
+  }
+
+  /* Tasa de cambio bar */
+  .rate-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    margin-bottom: 22px;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.85rem;
+    flex-wrap: wrap;
+  }
+  .rate-bar label { color: #6b675c; }
+  .rate-bar input[type=number] {
+    width: 110px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    padding: 4px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+  }
+  .rate-bar .rate-note {
+    color: #9b9788;
+    font-size: 0.78rem;
+    margin-left: auto;
+  }
+
+  /* Balances overview */
+  .balances {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .balance-card {
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .balance-card.cop { background: var(--cop-soft); border: 1px solid #c7e2d2; }
+  .balance-card.usd { background: var(--usd-soft); border: 1px solid #c9d9ec; }
+
+  .balance-card .label {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 600;
+  }
+  .balance-card.cop .label { color: var(--cop-color); }
+  .balance-card.usd .label { color: var(--usd-color); }
+
+  .balance-card .amount {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-top: 6px;
+    letter-spacing: -0.01em;
+  }
+  .balance-card .sub {
+    font-size: 0.78rem;
+    color: #80796a;
+    margin-top: 4px;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+  }
+
+  /* Section headers */
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 28px 0 12px;
+  }
+  .section-head h2 {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    margin: 0;
+    color: #4a463b;
+  }
+
+  /* Buttons */
+  button {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    transition: transform 0.05s ease, opacity 0.15s ease;
+  }
+  button:active { transform: scale(0.97); }
+
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    padding: 8px 16px;
+    font-size: 0.85rem;
+  }
+  .btn-secondary {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    padding: 8px 14px;
+    font-size: 0.8rem;
+  }
+  .btn-tiny {
+    background: transparent;
+    color: #9b9788;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    border: 1px solid var(--line);
+  }
+  .btn-tiny:hover { color: var(--danger); border-color: var(--danger); }
+
+  /* Income list */
+  .income-row, .category-row {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+
+  .income-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.9rem;
+  }
+  .income-row .tag {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 700;
+  }
+  .tag.cop { background: var(--cop-soft); color: var(--cop-color); }
+  .tag.usd { background: var(--usd-soft); color: var(--usd-color); }
+
+  /* Category cards */
+  .category-row {
+    cursor: pointer;
+  }
+  .category-row .head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .category-row .name {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+  }
+  .category-row .name-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .category-row .icon-btn {
+    background: transparent;
+    border: none;
+    color: #b3afa1;
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 2px 4px;
+    line-height: 1;
+    border-radius: 4px;
+  }
+  .category-row .icon-btn:hover {
+    color: var(--accent);
+    background: var(--paper-2);
+  }
+  .category-row .name-edit-input {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+    padding: 2px 6px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--ink);
+  }
+  .category-row .balances-line {
+    display: flex;
+    gap: 14px;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.85rem;
+  }
+  .category-row .balances-line span.cop { color: var(--cop-color); font-weight: 700; }
+  .category-row .balances-line span.usd { color: var(--usd-color); font-weight: 700; }
+  .category-row .balances-line .neg { color: var(--danger); }
+
+  .progress-track {
+    height: 6px;
+    background: var(--paper-2);
+    border-radius: 4px;
+    margin-top: 10px;
+    overflow: hidden;
+    display: flex;
+    gap: 2px;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 4px;
+  }
+  .progress-fill.cop { background: var(--cop-color); }
+  .progress-fill.usd { background: var(--usd-color); }
+
+  .category-row .budget-line {
+    font-size: 0.75rem;
+    color: #9b9788;
+    margin-top: 6px;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+  }
+
+  .category-detail {
+    margin-top: 10px;
+    border-top: 1px dashed var(--line);
+    padding-top: 10px;
+    display: none;
+  }
+  .category-row.open .category-detail { display: block; }
+
+  .movement {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    padding: 4px 0;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    align-items: center;
+  }
+  .movement .desc { color: #6b675c; flex: 1; }
+  .movement .amt.cop { color: var(--cop-color); font-weight: 600; }
+  .movement .amt.usd { color: var(--usd-color); font-weight: 600; }
+
+  /* Forms */
+  .form-grid {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 100px 90px;
+    gap: 8px;
+  }
+  input, select {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.9rem;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--ink);
+    width: 100%;
+  }
+  input:focus, select:focus, button:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .new-category-form, .new-income-form {
+    background: white;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+
+  .footer-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 40px;
+    flex-wrap: wrap;
+  }
+
+  .storage-note {
+    text-align: center;
+    color: #9b9788;
+    font-size: 0.75rem;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    margin: 10px 0 0;
+  }
+
+  .empty-msg {
+    text-align: center;
+    color: #9b9788;
+    font-size: 0.85rem;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    padding: 20px 0;
+  }
+
+  /* Quick add inside category */
+  .quick-add {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .quick-add input[type=text] { flex: 2; }
+  .quick-add input[type=number] { flex: 1; }
+  .quick-add select { flex: 0 0 70px; }
+
+  /* Exchange section */
+  .exchange-row {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .exchange-row .desc { color: #6b675c; }
+  .exchange-row .arrow { color: var(--accent); font-weight: 700; }
+
+  .new-exchange-form {
+    background: white;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .exchange-form-row {
+    display: grid;
+    grid-template-columns: 90px auto 90px 1fr;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.85rem;
+  }
+  .exchange-form-row .arrow-static {
+    text-align: center;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .exchange-result {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.8rem;
+    color: #6b675c;
+    margin-top: 8px;
+  }
+
+  /* Reconciliation */
+  .new-reconcile-form {
+    background: white;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .recon-hint {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.8rem;
+    color: #9b9788;
+    margin: 0 0 10px;
+  }
+  .recon-form-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .recon-result {
+    margin-top: 10px;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.85rem;
+  }
+  .recon-result .recon-line {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+  }
+  .recon-result .recon-line.diff {
+    border-top: 1px dashed var(--line);
+    margin-top: 4px;
+    padding-top: 6px;
+    font-weight: 700;
+  }
+  .recon-result .ok { color: var(--cop-color); }
+  .recon-result .bad { color: var(--danger); }
+
+  .recon-adjust {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.85rem;
+  }
+  .recon-adjust .adjust-block {
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+  .recon-adjust .adjust-title {
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .recon-adjust .adjust-title.surplus { color: var(--cop-color); }
+  .recon-adjust .adjust-title.shortage { color: var(--danger); }
+  .recon-adjust label {
+    display: block;
+    font-size: 0.78rem;
+    color: #6b675c;
+    margin: 6px 0 2px;
+  }
+  .recon-adjust input[type=text], .recon-adjust select {
+    width: 100%;
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+  }
+  .recon-adjust .adjust-check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .recon-adjust .adjust-check input[type=checkbox] {
+    width: auto;
+  }
+
+
+  .recon-history-item {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.82rem;
+  }
+  .recon-history-item .recon-date {
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .recon-history-item .recon-detail-line {
+    display: flex;
+    justify-content: space-between;
+    padding: 1px 0;
+    color: #6b675c;
+  }
+  .recon-history-item .recon-detail-line.diff.ok { color: var(--cop-color); font-weight: 700; }
+  .recon-history-item .recon-detail-line.diff.bad { color: var(--danger); font-weight: 700; }
+  .recon-history-item .recon-delete {
+    text-align: right;
+    margin-top: 6px;
+  }
+
+  /* Change/vuelto in expense form */
+  .change-toggle {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.75rem;
+    color: #9b9788;
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .change-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .change-row input[type=number] { flex: 1; }
+  .change-row select { flex: 0 0 70px; }
+  .change-row .change-label {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.78rem;
+    color: #9b9788;
+    align-self: center;
+    white-space: nowrap;
+  }
+  .movement .change-note {
+    font-size: 0.72rem;
+    color: #9b9788;
+    display: block;
+  }
+
+  .conversion-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    align-items: center;
+    background: var(--paper-2);
+    border-radius: 6px;
+    padding: 6px 8px;
+  }
+  .conversion-row .change-label {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.78rem;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .conversion-row input[type=number] {
+    width: 100px;
+    flex: 0 0 100px;
+  }
+  .conversion-preview {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.78rem;
+    color: #6b675c;
+  }
+
+  /* Budget summary inside category detail */
+  .budget-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    margin-bottom: 10px;
+  }
+  .budget-summary .stat {
+    background: var(--paper-2);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  .budget-summary .stat .stat-label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #9b9788;
+  }
+  .budget-summary .stat .stat-value {
+    font-size: 0.92rem;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+  .budget-summary .stat .stat-value.neg { color: var(--danger); }
+  .budget-summary .stat .stat-value.cop { color: var(--cop-color); }
+  .budget-summary .stat .stat-value.usd { color: var(--usd-color); }
+
+  .progress-track.over .progress-fill {
+    background: var(--danger) !important;
+  }
+
+  .alert-line {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.78rem;
+    color: var(--danger);
+    margin-top: 6px;
+    font-weight: 600;
+  }
+
+  .group-head {
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #9b9788;
+    font-weight: 700;
+    margin: 18px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+  }
+  .group-head:first-child { margin-top: 0; }
+
+  /* Distribution summary & table */
+  .dist-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+  }
+  .dist-summary .dist-card {
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    font-size: 0.85rem;
+  }
+  .dist-summary .dist-card.cop { background: var(--cop-soft); border: 1px solid #c7e2d2; }
+  .dist-summary .dist-card.usd { background: var(--usd-soft); border: 1px solid #c9d9ec; }
+  .dist-summary .dist-card .dist-title {
+    font-weight: 700;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 6px;
+  }
+  .dist-summary .dist-card.cop .dist-title { color: var(--cop-color); }
+  .dist-summary .dist-card.usd .dist-title { color: var(--usd-color); }
+  .dist-summary .dist-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+  }
+  .dist-summary .dist-row.total {
+    border-top: 1px dashed var(--line);
+    margin-top: 4px;
+    padding-top: 6px;
+    font-weight: 700;
+  }
+  .dist-summary .dist-row .neg { color: var(--danger); }
+  .dist-summary .dist-row .pos { color: var(--cop-color); }
+
+  .dist-table-wrap {
+    overflow-x: auto;
+    margin-bottom: 10px;
+  }
+  table.dist-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.82rem;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  table.dist-table th, table.dist-table td {
+    padding: 8px 10px;
+    text-align: right;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  table.dist-table th:first-child, table.dist-table td:first-child {
+    text-align: left;
+  }
+  table.dist-table th {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #9b9788;
+    font-weight: 700;
+    background: var(--paper-2);
+  }
+  table.dist-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  table.dist-table tfoot td {
+    font-weight: 700;
+    background: var(--paper-2);
+    border-top: 2px solid var(--line);
+    border-bottom: none;
+  }
+  table.dist-table .cop-cell { color: var(--cop-color); }
+  table.dist-table .usd-cell { color: var(--usd-color); }
+  table.dist-table .neg { color: var(--danger); }
+  table.dist-table .muted { color: #b3afa1; }
+
+  .budget-edit-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+  }
+  .budget-edit-row .change-label {
+    white-space: nowrap;
+  }
+
+  .currency-input {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .currency-input input[type=number] {
+    border: none;
+    border-radius: 0;
+    width: 100px;
+  }
+  .currency-input input[type=number]:focus {
+    outline: none;
+  }
+  .currency-badge {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+  }
+  .currency-badge.cop { background: var(--cop-soft); color: var(--cop-color); }
+  .currency-badge.usd { background: var(--usd-soft); color: var(--usd-color); }
+
+  @media (max-width: 480px) {
+    .balances { grid-template-columns: 1fr; }
+    .form-row { grid-template-columns: 1fr; }
+    .income-row { grid-template-columns: 1fr; font-size: 0.85rem; }
+    .quick-add { flex-wrap: wrap; }
+  }
+  .sync-login-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--paper);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+  }
+  .sync-login-box {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 28px 24px;
+    max-width: 360px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.06);
+  }
+  .sync-login-box h2 {
+    font-family: 'Playfair Display', Georgia, serif;
+    margin: 0 0 6px;
+    font-size: 1.6rem;
+  }
+  .sync-login-sub {
+    font-size: 0.85rem;
+    color: #6b675c;
+    margin: 0 0 18px;
+  }
+  .sync-login-box input {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.95rem;
+  }
+  .sync-login-error {
+    color: var(--danger);
+    font-size: 0.8rem;
+    margin-top: 10px;
+    min-height: 1em;
+  }
+  .sync-status-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--paper-2);
+    border-top: 1px solid var(--line);
+    padding: 6px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: #6b675c;
+    z-index: 500;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+  }
+  .sync-status-bar.syncing #syncStatusText::before { content: "⟳ "; }
+  .sync-status-bar.error #syncStatusText { color: var(--danger); }
+  .sync-logout-btn {
+    background: none;
+    border: none;
+    color: #6b675c;
+    text-decoration: underline;
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 0;
+  }
+</style>
+</head>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<body>
+<div id="syncLoginOverlay" class="sync-login-overlay">
+  <div class="sync-login-box">
+    <h2>Doble<span class="dot">●</span>Caja<span class="dot2">●</span></h2>
+    <p class="sync-login-sub">Inicia sesión para sincronizar tus datos entre dispositivos.</p>
+    <input type="email" id="syncEmail" placeholder="Correo electrónico" autocomplete="username">
+    <input type="password" id="syncPassword" placeholder="Contraseña" autocomplete="current-password">
+    <button id="syncLoginBtn" class="btn-primary" style="width:100%;">Entrar</button>
+    <div id="syncLoginError" class="sync-login-error"></div>
+  </div>
+</div>
+<div id="syncStatusBar" class="sync-status-bar" style="display:none;">
+  <span id="syncStatusText">Sincronizado</span>
+  <button id="syncLogoutBtn" class="sync-logout-btn">Cerrar sesión</button>
+</div>
+<div class="app" id="appRoot" style="display:none;">
+  <header class="top">
+    <h1>Doble<span class="dot">●</span>Caja<span class="dot2">●</span></h1>
+  </header>
+  <p class="subtitle">Ingresos, gastos y saldos por categoría — en pesos y dólares, sin mezclarlos.</p>
+
+  <div class="rate-bar">
+    <label for="rateInput">1 USD =</label>
+    <input type="number" id="rateInput" min="0" step="1" placeholder="ej. 4000">
+    <span>COP</span>
+    <span class="rate-note" id="rateNote">Solo se usa para conversiones puntuales que tú pidas.</span>
+  </div>
+
+  <div class="balances">
+    <div class="balance-card cop">
+      <div class="label">Disponible en pesos</div>
+      <div class="amount" id="totalCOP">$0</div>
+      <div class="sub" id="subCOP"></div>
+    </div>
+    <div class="balance-card usd">
+      <div class="label">Disponible en dólares</div>
+      <div class="amount" id="totalUSD">$0</div>
+      <div class="sub" id="subUSD"></div>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <h2>Conciliación de efectivo</h2>
+    <button class="btn-secondary" id="toggleReconcileForm">+ Contar efectivo</button>
+  </div>
+
+  <div class="new-reconcile-form" id="reconcileForm" style="display:none;">
+    <p class="recon-hint">Ingresa el efectivo que acabas de contar. Lo comparamos con lo que la app calcula que deberías tener.</p>
+    <div class="recon-form-row">
+      <div class="currency-input cop">
+        <span class="currency-badge cop">COP</span>
+        <input type="number" placeholder="0" min="0" step="1" id="reconCOP">
+      </div>
+      <div class="currency-input usd">
+        <span class="currency-badge usd">USD</span>
+        <input type="number" placeholder="0.00" min="0" step="0.01" id="reconUSD">
+      </div>
+    </div>
+    <div class="recon-result" id="reconResult"></div>
+    <div class="recon-adjust" id="reconAdjust" style="display:none;"></div>
+    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px;">
+      <button class="btn-secondary" id="cancelReconcile">Cancelar</button>
+      <button class="btn-primary" id="saveReconcile">Guardar conciliación</button>
+    </div>
+  </div>
+
+  <div id="reconcileHistory"></div>
+
+  <div class="section-head">
+    <h2>Distribución del presupuesto</h2>
+  </div>
+  <div id="distributionSummary"></div>
+  <div id="distributionTable"></div>
+
+  <div class="section-head">
+    <h2>Cambios de moneda</h2>
+    <button class="btn-secondary" id="toggleExchangeForm">+ Registrar cambio</button>
+  </div>
+
+  <div class="new-exchange-form" id="exchangeForm" style="display:none;">
+    <div class="exchange-form-row">
+      <input type="number" id="exchFromAmount" placeholder="Monto" min="0" step="0.01">
+      <select id="exchFromCurrency">
+        <option value="USD">USD</option>
+        <option value="COP">COP</option>
+      </select>
+      <span class="arrow-static">→</span>
+      <span>
+        a tasa
+        <input type="number" id="exchRate" placeholder="ej. 3600" min="0" step="0.01" style="width:90px; display:inline-block;">
+      </span>
+    </div>
+    <div class="exchange-result" id="exchangeResult"></div>
+    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px;">
+      <button class="btn-secondary" id="cancelExchange">Cancelar</button>
+      <button class="btn-primary" id="saveExchange">Guardar cambio</button>
+    </div>
+  </div>
+
+  <div id="exchangeList"></div>
+
+  <div class="section-head">
+    <h2>Ingresos</h2>
+    <button class="btn-secondary" id="toggleIncomeForm">+ Agregar ingreso</button>
+  </div>
+
+  <div class="new-income-form" id="incomeForm" style="display:none;">
+    <div class="form-grid">
+      <div class="form-row">
+        <input type="text" id="incomeDesc" placeholder="Descripción (ej. Salario, Pago freelance)">
+        <input type="number" id="incomeAmount" placeholder="Monto" min="0" step="0.01">
+        <select id="incomeCurrency">
+          <option value="COP">COP</option>
+          <option value="USD">USD</option>
+        </select>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button class="btn-secondary" id="cancelIncome">Cancelar</button>
+        <button class="btn-primary" id="saveIncome">Guardar ingreso</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="incomeList"></div>
+
+  <div class="section-head">
+    <h2>Categorías de gasto</h2>
+    <button class="btn-secondary" id="toggleCategoryForm">+ Nueva categoría</button>
+  </div>
+
+  <div class="new-category-form" id="categoryForm" style="display:none;">
+    <div class="form-grid">
+      <div class="form-row">
+        <input type="text" id="catName" placeholder="Nombre (ej. Mercado, Transporte)">
+        <input type="number" id="catBudgetCOP" placeholder="COP" min="0" step="1">
+        <input type="number" id="catBudgetUSD" placeholder="USD" min="0" step="0.01">
+      </div>
+      <div class="form-row" style="grid-template-columns: 1fr;">
+        <select id="catGroup">
+          <option value="variables">Gasto variable (quincenal, pesos)</option>
+          <option value="fijos">Gasto fijo mensual (dólares)</option>
+          <option value="otras">Otra</option>
+        </select>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button class="btn-secondary" id="cancelCategory">Cancelar</button>
+        <button class="btn-primary" id="saveCategory">Crear categoría</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="categoryList"></div>
+
+  <div class="footer-actions">
+    <button class="btn-secondary" id="shareBtn" style="display:none;">Compartir respaldo (.json)</button>
+    <button class="btn-secondary" id="exportBtn">Descargar respaldo (.json)</button>
+    <button class="btn-secondary" id="importBtn">Importar respaldo (.json)</button>
+    <input type="file" id="importFile" accept="application/json" style="display:none;">
+  </div>
+  <p class="storage-note">Tus datos se guardan automáticamente en este navegador. En el celular usa "Compartir" para enviarte el respaldo por WhatsApp, correo o Drive; en la PC usa "Descargar" y luego "Importar" en el otro dispositivo.</p>
+</div>
+
+<script>
+(function () {
+  const STORAGE_KEY = 'doblecaja_data_v1';
+
+  let state = {
+    rate: null,
+    incomes: [], // {id, desc, amount, currency}
+    exchanges: [], // {id, fromAmount, fromCurrency, rate, toAmount, toCurrency}
+    reconciliations: [], // {id, date, countedCOP, countedUSD, expectedCOP, expectedUSD, diffCOP, diffUSD}
+    categories: [
+      { id: uid_static('fijo-alquiler'), name: 'Alquiler', budgetCOP: 0, budgetUSD: 0, movements: [], group: 'fijos' },
+      { id: uid_static('fijo-internet'), name: 'Internet', budgetCOP: 0, budgetUSD: 0, movements: [], group: 'fijos' },
+      { id: uid_static('fijo-colegio'), name: 'Colegio', budgetCOP: 0, budgetUSD: 0, movements: [], group: 'fijos' },
+      { id: uid_static('fijo-gasolina'), name: 'Gasolina', budgetCOP: 0, budgetUSD: 0, movements: [], group: 'fijos' },
+      { id: uid_static('semana-1'), name: 'Semana 1', budgetCOP: 0, budgetUSD: 0, movements: [], group: 'variables' },
+      { id: uid_static('semana-2'), name: 'Semana 2', budgetCOP: 0, budgetUSD: 0, movements: [], group: 'variables' }
+    ] // {id, name, budgetCOP, budgetUSD, movements:[{id, desc, amount, currency, change:{amount, currency}}], group}
+  };
+
+  function uid_static(label) {
+    return 'cat-' + label;
+  }
+
+  function loadFromMemory() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const loaded = JSON.parse(raw);
+        state = {
+          rate: loaded.rate ?? null,
+          incomes: loaded.incomes || [],
+          exchanges: loaded.exchanges || [],
+          reconciliations: loaded.reconciliations || [],
+          categories: loaded.categories || []
+        };
+      }
+    } catch (e) { /* ignore */ }
+  }
+  function saveToMemory() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    queueCloudSave();
+  }
+
+  // ---- Firebase sync ----
+  const firebaseConfig = {
+    apiKey: "AIzaSyDfxzi8Z2zLrXQ562WUTZzTos5x-yfNUz4",
+    authDomain: "sistema-de-flujo-de-efectivo.firebaseapp.com",
+    databaseURL: "https://sistema-de-flujo-de-efectivo-default-rtdb.firebaseio.com",
+    projectId: "sistema-de-flujo-de-efectivo",
+    storageBucket: "sistema-de-flujo-de-efectivo.firebasestorage.app",
+    messagingSenderId: "438508195015",
+    appId: "1:438508195015:web:671af6de0b33c7d6de82e2"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const fbAuth = firebase.auth();
+  const fbDb = firebase.database();
+
+  let cloudRef = null;
+  let cloudSaveTimer = null;
+  let applyingRemoteChange = false; // true while we're writing a remote update into state, to avoid re-saving it right back
+  let lastSavedJson = null;
+
+  const syncStatusBar = document.getElementById('syncStatusBar');
+  const syncStatusText = document.getElementById('syncStatusText');
+
+  function setSyncStatus(mode, text) {
+    syncStatusBar.classList.remove('syncing', 'error');
+    if (mode) syncStatusBar.classList.add(mode);
+    syncStatusText.textContent = text;
+  }
+
+  function queueCloudSave() {
+    if (applyingRemoteChange) return; // this save was triggered by a remote update, don't echo it back
+    if (!cloudRef) return; // not logged in yet
+    clearTimeout(cloudSaveTimer);
+    cloudSaveTimer = setTimeout(() => {
+      const json = JSON.stringify(state);
+      if (json === lastSavedJson) return;
+      setSyncStatus('syncing', 'Sincronizando…');
+      cloudRef.set(state)
+        .then(() => {
+          lastSavedJson = json;
+          setSyncStatus('', 'Sincronizado');
+        })
+        .catch((err) => {
+          setSyncStatus('error', 'Error al sincronizar (se guardó localmente)');
+          console.error('Error guardando en Firebase:', err);
+        });
+    }, 800);
+  }
+
+  // Firebase Realtime Database sometimes serializes arrays as objects
+  // (e.g. when entries were removed leaving gaps in numeric keys, or when
+  // an array is empty it's omitted entirely). This normalizes any of those
+  // shapes back into a clean JS array.
+  function toArray(value) {
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === 'object') return Object.values(value);
+    return [];
+  }
+
+  function startCloudSync(userId) {
+    cloudRef = fbDb.ref('users/' + userId + '/doblecaja');
+    cloudRef.on('value', (snapshot) => {
+      const remote = snapshot.val();
+      console.log('[DobleCaja] snapshot recibido de Firebase:', remote);
+      if (remote) {
+        applyingRemoteChange = true;
+        state = {
+          rate: remote.rate ?? null,
+          incomes: toArray(remote.incomes),
+          exchanges: toArray(remote.exchanges),
+          reconciliations: toArray(remote.reconciliations),
+          categories: toArray(remote.categories).map(c => ({
+            ...c,
+            movements: toArray(c.movements)
+          }))
+        };
+        lastSavedJson = JSON.stringify(state);
+        saveToMemory(); // updates localStorage cache; queueCloudSave() is a no-op due to applyingRemoteChange
+        if (state.rate) rateInput.value = state.rate; else rateInput.value = '';
+        renderAll();
+        applyingRemoteChange = false;
+        setSyncStatus('', 'Sincronizado');
+      } else {
+        // Nothing in the cloud yet for this user: push whatever we have locally.
+        lastSavedJson = null;
+        queueCloudSave();
+      }
+    }, (err) => {
+      setSyncStatus('error', 'Sin conexión con la nube (usando datos locales)');
+      console.error('Error escuchando Firebase:', err);
+    });
+  }
+
+  function stopCloudSync() {
+    if (cloudRef) cloudRef.off();
+    cloudRef = null;
+    lastSavedJson = null;
+  }
+
+  const loginOverlay = document.getElementById('syncLoginOverlay');
+  const appRoot = document.getElementById('appRoot');
+  const syncEmailInput = document.getElementById('syncEmail');
+  const syncPasswordInput = document.getElementById('syncPassword');
+  const syncLoginError = document.getElementById('syncLoginError');
+
+  document.getElementById('syncLoginBtn').addEventListener('click', () => {
+    const email = syncEmailInput.value.trim();
+    const password = syncPasswordInput.value;
+    syncLoginError.textContent = '';
+    if (!email || !password) {
+      syncLoginError.textContent = 'Ingresa tu correo y contraseña.';
+      return;
+    }
+    fbAuth.signInWithEmailAndPassword(email, password)
+      .catch(() => {
+        syncLoginError.textContent = 'Correo o contraseña incorrectos.';
+      });
+  });
+
+  syncPasswordInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('syncLoginBtn').click();
+  });
+
+  document.getElementById('syncLogoutBtn').addEventListener('click', () => {
+    fbAuth.signOut();
+  });
+
+  fbAuth.onAuthStateChanged((user) => {
+    if (user) {
+      loginOverlay.style.display = 'none';
+      appRoot.style.display = '';
+      syncStatusBar.style.display = 'flex';
+      startCloudSync(user.uid);
+    } else {
+      stopCloudSync();
+      loginOverlay.style.display = 'flex';
+      appRoot.style.display = 'none';
+      syncStatusBar.style.display = 'none';
+    }
+  });
+
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  function fmt(amount, currency) {
+    const opts = currency === 'COP'
+      ? { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }
+      : { style: 'currency', currency: 'USD', minimumFractionDigits: 2 };
+    try {
+      return new Intl.NumberFormat('es-CO', opts).format(amount);
+    } catch (e) {
+      return (currency === 'COP' ? '$' : 'US$') + amount.toFixed(currency === 'COP' ? 0 : 2);
+    }
+  }
+
+  // ---- Computations ----
+  function totalIncome(currency) {
+    return state.incomes
+      .filter(i => i.currency === currency)
+      .reduce((s, i) => s + Number(i.amount), 0);
+  }
+
+  // Returns the currency in which a movement's amount should be counted
+  // against the category budget. If the movement has a budgetCurrency
+  // (because it was converted at registration time), use that; otherwise
+  // use the movement's own currency.
+  function movementBudgetImpact(m) {
+    if (m.budgetCurrency && m.budgetAmount != null) {
+      return { currency: m.budgetCurrency, amount: Number(m.budgetAmount) };
+    }
+    return { currency: m.currency, amount: Number(m.amount) };
+  }
+
+  // "Budget spent": how much of the category's budget (in budget currency)
+  // has been used, applying any conversion done at registration time.
+  function categorySpent(cat, currency) {
+    return cat.movements
+      .map(movementBudgetImpact)
+      .filter(impact => impact.currency === currency)
+      .reduce((s, impact) => s + impact.amount, 0);
+  }
+
+  function totalBudgeted(currency) {
+    const key = currency === 'COP' ? 'budgetCOP' : 'budgetUSD';
+    return state.categories.reduce((s, c) => s + (Number(c[key]) || 0), 0);
+  }
+
+  function budgetSpentTotal(currency) {
+    return state.categories.reduce((s, c) => s + categorySpent(c, currency), 0);
+  }
+
+  // "Real spent": actual cash that left your pocket in each currency,
+  // regardless of which budget it was counted against.
+  function realCategorySpent(cat, currency) {
+    return cat.movements
+      .filter(m => m.currency === currency)
+      .reduce((s, m) => s + Number(m.amount), 0);
+  }
+
+  function totalSpent(currency) {
+    return state.categories.reduce((s, c) => s + realCategorySpent(c, currency), 0);
+  }
+
+  // Net effect of currency exchanges on each currency's general pool
+  function exchangeNet(currency) {
+    let net = 0;
+    state.exchanges.forEach(ex => {
+      if (ex.fromCurrency === currency) net -= Number(ex.fromAmount);
+      if (ex.toCurrency === currency) net += Number(ex.toAmount);
+    });
+    return net;
+  }
+
+  // Total "vuelto" (change received) across all movements, added to general pool
+  function getMovementChanges(m) {
+    // Backward compatible: old data had a single m.change object
+    if (m.changes) return m.changes;
+    if (m.change) return [m.change];
+    return [];
+  }
+
+  function totalChangeReceived(currency) {
+    let total = 0;
+    state.categories.forEach(cat => {
+      cat.movements.forEach(m => {
+        getMovementChanges(m).forEach(ch => {
+          if (ch && ch.currency === currency && Number(ch.amount) > 0) {
+            total += Number(ch.amount);
+          }
+        });
+      });
+    });
+    return total;
+  }
+
+  function availableUnassigned(currency) {
+    // income that hasn't been allocated to any budget
+    return totalIncome(currency) - totalBudgeted(currency);
+  }
+
+  // ---- Rendering ----
+  function getAvailable(currency) {
+    return totalIncome(currency) - totalSpent(currency) + exchangeNet(currency) + totalChangeReceived(currency);
+  }
+
+  function renderBalances() {
+    const copAvailable = getAvailable('COP');
+    const usdAvailable = getAvailable('USD');
+
+    document.getElementById('totalCOP').textContent = fmt(copAvailable, 'COP');
+    document.getElementById('totalUSD').textContent = fmt(usdAvailable, 'USD');
+
+    const unassignedCOP = availableUnassigned('COP');
+    const unassignedUSD = availableUnassigned('USD');
+
+    const extraCOP = exchangeNet('COP') + totalChangeReceived('COP');
+    const extraUSD = exchangeNet('USD') + totalChangeReceived('USD');
+
+    let subCop = `Ingresos: ${fmt(totalIncome('COP'), 'COP')} · Gastado: ${fmt(totalSpent('COP'), 'COP')}`;
+    if (extraCOP !== 0) subCop += ` · Cambios/vueltos: ${extraCOP > 0 ? '+' : ''}${fmt(extraCOP, 'COP')}`;
+    if (unassignedCOP !== 0) subCop += ` · Sin asignar a presupuesto: ${fmt(unassignedCOP, 'COP')}`;
+    document.getElementById('subCOP').textContent = subCop;
+
+    let subUsd = `Ingresos: ${fmt(totalIncome('USD'), 'USD')} · Gastado: ${fmt(totalSpent('USD'), 'USD')}`;
+    if (extraUSD !== 0) subUsd += ` · Cambios/vueltos: ${extraUSD > 0 ? '+' : ''}${fmt(extraUSD, 'USD')}`;
+    if (unassignedUSD !== 0) subUsd += ` · Sin asignar a presupuesto: ${fmt(unassignedUSD, 'USD')}`;
+    document.getElementById('subUSD').textContent = subUsd;
+  }
+
+  function renderReconcileHistory() {
+    const container = document.getElementById('reconcileHistory');
+    if (!state.reconciliations.length) {
+      container.innerHTML = '<p class="empty-msg">Aún no has registrado ninguna conciliación.</p>';
+      return;
+    }
+    container.innerHTML = state.reconciliations.slice().reverse().map(r => {
+      const dateStr = new Date(r.date).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' });
+      const lines = [];
+      if (r.countedCOP !== 0 || r.expectedCOP !== 0) {
+        const diffClass = Math.abs(r.diffCOP) < 1 ? 'ok' : 'bad';
+        const diffLabel = r.diffCOP > 0 ? 'Sobra' : r.diffCOP < 0 ? 'Falta' : 'Cuadra';
+        lines.push(`<div class="recon-detail-line"><span>Contado COP</span><span>${fmt(r.countedCOP, 'COP')}</span></div>`);
+        lines.push(`<div class="recon-detail-line"><span>Esperado COP</span><span>${fmt(r.expectedCOP, 'COP')}</span></div>`);
+        lines.push(`<div class="recon-detail-line diff ${diffClass}"><span>${diffLabel} (COP)</span><span>${fmt(Math.abs(r.diffCOP), 'COP')}</span></div>`);
+      }
+      if (r.countedUSD !== 0 || r.expectedUSD !== 0) {
+        const diffClass = Math.abs(r.diffUSD) < 0.01 ? 'ok' : 'bad';
+        const diffLabel = r.diffUSD > 0 ? 'Sobra' : r.diffUSD < 0 ? 'Falta' : 'Cuadra';
+        lines.push(`<div class="recon-detail-line"><span>Contado USD</span><span>${fmt(r.countedUSD, 'USD')}</span></div>`);
+        lines.push(`<div class="recon-detail-line"><span>Esperado USD</span><span>${fmt(r.expectedUSD, 'USD')}</span></div>`);
+        lines.push(`<div class="recon-detail-line diff ${diffClass}"><span>${diffLabel} (USD)</span><span>${fmt(Math.abs(r.diffUSD), 'USD')}</span></div>`);
+      }
+      if (r.adjustments && r.adjustments.length) {
+        r.adjustments.forEach(adj => {
+          const label = adj.type === 'income'
+            ? `Ajustado como ingreso: ${escapeHtml(adj.desc)} (+${fmt(adj.amount, adj.currency)})`
+            : `Ajustado como gasto en "${escapeHtml(adj.categoryName)}": ${escapeHtml(adj.desc)} (${fmt(adj.amount, adj.currency)})`;
+          lines.push(`<div class="recon-detail-line" style="font-size:0.78rem; color:#80796a;"><span>${label}</span><span></span></div>`);
+        });
+      }
+      return `
+        <div class="recon-history-item">
+          <div class="recon-date">${dateStr}</div>
+          ${lines.join('')}
+          <div class="recon-delete">
+            <button class="btn-tiny" data-action="delete-reconcile" data-id="${r.id}">Eliminar</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderDistribution() {
+    const summaryContainer = document.getElementById('distributionSummary');
+    const tableContainer = document.getElementById('distributionTable');
+
+    const incomeCOP = totalIncome('COP');
+    const incomeUSD = totalIncome('USD');
+    const budgetedCOP = totalBudgeted('COP');
+    const budgetedUSD = totalBudgeted('USD');
+    const extraCOP = exchangeNet('COP') + totalChangeReceived('COP');
+    const extraUSD = exchangeNet('USD') + totalChangeReceived('USD');
+    const availableForBudgetCOP = incomeCOP + extraCOP;
+    const availableForBudgetUSD = incomeUSD + extraUSD;
+    const leftoverCOP = availableForBudgetCOP - budgetedCOP;
+    const leftoverUSD = availableForBudgetUSD - budgetedUSD;
+
+    function summaryCard(currency, income, budgeted, extra, leftover) {
+      const cls = currency.toLowerCase();
+      const extraRow = extra !== 0
+        ? `<div class="dist-row"><span>Cambios/vueltos</span><span class="${extra > 0 ? 'pos' : 'neg'}">${extra > 0 ? '+' : ''}${fmt(extra, currency)}</span></div>`
+        : '';
+      const leftoverLabel = leftover < 0 ? 'Presupuestaste de más por' : 'Sin asignar a ninguna categoría';
+      const leftoverValue = leftover < 0 ? fmt(Math.abs(leftover), currency) : fmt(leftover, currency);
+      return `
+        <div class="dist-card ${cls}">
+          <div class="dist-title">${currency === 'COP' ? 'Pesos (COP)' : 'Dólares (USD)'}</div>
+          <div class="dist-row"><span>Ingresos registrados</span><span>${fmt(income, currency)}</span></div>
+          ${extraRow}
+          <div class="dist-row"><span>Total presupuestado en categorías</span><span>${fmt(budgeted, currency)}</span></div>
+          <div class="dist-row total"><span>${leftoverLabel}</span><span class="${leftover < 0 ? 'neg' : 'pos'}">${leftoverValue}</span></div>
+        </div>
+      `;
+    }
+
+    summaryContainer.innerHTML = `<div class="dist-summary">
+      ${summaryCard('COP', incomeCOP, budgetedCOP, extraCOP, leftoverCOP)}
+      ${summaryCard('USD', incomeUSD, budgetedUSD, extraUSD, leftoverUSD)}
+    </div>`;
+
+    if (state.categories.length === 0) {
+      tableContainer.innerHTML = '';
+      return;
+    }
+
+    const rows = state.categories.map(cat => {
+      const spentCOP = categorySpent(cat, 'COP');
+      const spentUSD = categorySpent(cat, 'USD');
+      const budgetCOP = Number(cat.budgetCOP) || 0;
+      const budgetUSD = Number(cat.budgetUSD) || 0;
+      const remCOP = budgetCOP - spentCOP;
+      const remUSD = budgetUSD - spentUSD;
+
+      const groupLabel = cat.group === 'fijos' ? 'Fijo' : cat.group === 'variables' ? 'Variable' : 'Otra';
+
+      const cellCOPBudget = budgetCOP > 0 ? fmt(budgetCOP, 'COP') : '<span class="muted">—</span>';
+      const cellUSDBudget = budgetUSD > 0 ? fmt(budgetUSD, 'USD') : '<span class="muted">—</span>';
+      const cellCOPSpent = spentCOP > 0 ? fmt(spentCOP, 'COP') : '<span class="muted">—</span>';
+      const cellUSDSpent = spentUSD > 0 ? fmt(spentUSD, 'USD') : '<span class="muted">—</span>';
+      const cellCOPRem = budgetCOP > 0 ? `<span class="${remCOP < 0 ? 'neg' : 'cop-cell'}">${fmt(remCOP, 'COP')}</span>` : '<span class="muted">—</span>';
+      const cellUSDRem = budgetUSD > 0 ? `<span class="${remUSD < 0 ? 'neg' : 'usd-cell'}">${fmt(remUSD, 'USD')}</span>` : '<span class="muted">—</span>';
+
+      return `
+        <tr>
+          <td>${escapeHtml(cat.name)}<br><span class="muted" style="font-size:0.7rem;">${groupLabel}</span></td>
+          <td>${cellCOPBudget}</td>
+          <td>${cellUSDBudget}</td>
+          <td>${cellCOPSpent}</td>
+          <td>${cellUSDSpent}</td>
+          <td>${cellCOPRem}</td>
+          <td>${cellUSDRem}</td>
+        </tr>
+      `;
+    }).join('');
+
+    tableContainer.innerHTML = `
+      <div class="dist-table-wrap">
+        <table class="dist-table">
+          <thead>
+            <tr>
+              <th>Categoría</th>
+              <th>Presup. COP</th>
+              <th>Presup. USD</th>
+              <th>Gastado COP</th>
+              <th>Gastado USD</th>
+              <th>Queda COP</th>
+              <th>Queda USD</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>Total</td>
+              <td>${fmt(budgetedCOP, 'COP')}</td>
+              <td>${fmt(budgetedUSD, 'USD')}</td>
+              <td>${fmt(budgetSpentTotal('COP'), 'COP')}</td>
+              <td>${fmt(budgetSpentTotal('USD'), 'USD')}</td>
+              <td class="${(budgetedCOP - budgetSpentTotal('COP')) < 0 ? 'neg' : ''}">${fmt(budgetedCOP - budgetSpentTotal('COP'), 'COP')}</td>
+              <td class="${(budgetedUSD - budgetSpentTotal('USD')) < 0 ? 'neg' : ''}">${fmt(budgetedUSD - budgetSpentTotal('USD'), 'USD')}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    `;
+  }
+
+  function renderIncomeList() {
+    const container = document.getElementById('incomeList');
+    if (state.incomes.length === 0) {
+      container.innerHTML = '<p class="empty-msg">Aún no has registrado ingresos. Agrega lo que ganas en pesos y/o en dólares.</p>';
+      return;
+    }
+    container.innerHTML = state.incomes.map(inc => `
+      <div class="income-row">
+        <span>${escapeHtml(inc.desc) || 'Ingreso'}</span>
+        <span class="tag ${inc.currency.toLowerCase()}">${inc.currency}</span>
+        <strong>${fmt(Number(inc.amount), inc.currency)}</strong>
+        <button class="btn-tiny" data-action="delete-income" data-id="${inc.id}">Eliminar</button>
+      </div>
+    `).join('');
+  }
+
+  function renderCategoryList() {
+    const container = document.getElementById('categoryList');
+    if (state.categories.length === 0) {
+      container.innerHTML = '<p class="empty-msg">No tienes categorías todavía. Crea una como "Mercado" o "Transporte" y empieza a registrar tus gastos.</p>';
+      return;
+    }
+
+    const fijos = state.categories.filter(c => c.group === 'fijos');
+    const variables = state.categories.filter(c => c.group === 'variables');
+    const otras = state.categories.filter(c => c.group !== 'fijos' && c.group !== 'variables');
+
+    let html = '';
+    if (fijos.length) {
+      html += `<div class="group-head">Gastos fijos mensuales (en dólares)</div>`;
+      html += fijos.map(renderCategory).join('');
+    }
+    if (variables.length) {
+      html += `<div class="group-head">Gastos variables por quincena (en pesos)</div>`;
+      html += variables.map(renderCategory).join('');
+    }
+    if (otras.length) {
+      html += fijos.length || variables.length ? `<div class="group-head">Otras categorías</div>` : '';
+      html += otras.map(renderCategory).join('');
+    }
+    container.innerHTML = html;
+  }
+
+  function renderCategory(cat) {
+      const spentCOP = categorySpent(cat, 'COP');
+      const spentUSD = categorySpent(cat, 'USD');
+      const budgetCOP = Number(cat.budgetCOP) || 0;
+      const budgetUSD = Number(cat.budgetUSD) || 0;
+      const remCOP = budgetCOP - spentCOP;
+      const remUSD = budgetUSD - spentUSD;
+
+      const pctCOP = budgetCOP > 0 ? Math.min(100, (spentCOP / budgetCOP) * 100) : 0;
+      const pctUSD = budgetUSD > 0 ? Math.min(100, (spentUSD / budgetUSD) * 100) : 0;
+      const overCOP = budgetCOP > 0 && spentCOP > budgetCOP;
+      const overUSD = budgetUSD > 0 && spentUSD > budgetUSD;
+      const isOver = overCOP || overUSD;
+      const movementCount = cat.movements.length;
+
+      const movementsHtml = cat.movements.length
+        ? cat.movements.slice().reverse().map(m => {
+            const changes = getMovementChanges(m);
+            const changesHtml = changes.length
+              ? changes.map(ch => `<span class="change-note">Vuelto recibido: ${fmt(Number(ch.amount), ch.currency)}</span>`).join('')
+              : '';
+            const conversionHtml = (m.budgetCurrency && m.budgetAmount != null)
+              ? `<span class="change-note">Contado como ${fmt(Number(m.budgetAmount), m.budgetCurrency)} del presupuesto (tasa ${m.conversionRate})</span>`
+              : '';
+
+            // Offer a "convert" action for movements registered before the
+            // budget-conversion feature existed, when their currency
+            // doesn't match the category's only defined budget currency.
+            let convertBtn = '';
+            if (!m.budgetCurrency) {
+              if (m.currency === 'COP' && budgetUSD > 0 && budgetCOP === 0) {
+                convertBtn = `<button class="btn-tiny" data-action="convert-movement" data-cat="${cat.id}" data-mov="${m.id}" data-target="USD">Convertir a USD</button>`;
+              } else if (m.currency === 'USD' && budgetCOP > 0 && budgetUSD === 0) {
+                convertBtn = `<button class="btn-tiny" data-action="convert-movement" data-cat="${cat.id}" data-mov="${m.id}" data-target="COP">Convertir a COP</button>`;
+              }
+            }
+
+            return `
+            <div class="movement">
+              <span class="desc">
+                ${escapeHtml(m.desc) || 'Gasto'}
+                ${changesHtml}
+                ${conversionHtml}
+              </span>
+              <span class="amt ${m.currency.toLowerCase()}">${fmt(Number(m.amount), m.currency)}</span>
+              ${convertBtn}
+              <button class="btn-tiny" data-action="delete-movement" data-cat="${cat.id}" data-mov="${m.id}">×</button>
+            </div>
+          `;
+          }).join('')
+        : '<p class="empty-msg" style="padding:8px 0;">Sin gastos registrados aún.</p>';
+
+      const budgetLineParts = [];
+      if (budgetCOP > 0) budgetLineParts.push(`Presupuesto: ${fmt(budgetCOP, 'COP')}`);
+      if (budgetUSD > 0) budgetLineParts.push(`Presupuesto: ${fmt(budgetUSD, 'USD')}`);
+      const budgetLine = budgetLineParts.length ? budgetLineParts.join(' · ') : 'Sin presupuesto definido';
+
+      const remParts = [];
+      if (budgetCOP > 0) remParts.push(`<span class="cop ${remCOP < 0 ? 'neg' : ''}">${fmt(remCOP, 'COP')}</span>`);
+      if (budgetUSD > 0) remParts.push(`<span class="usd ${remUSD < 0 ? 'neg' : ''}">${fmt(remUSD, 'USD')}</span>`);
+      if (remParts.length === 0) {
+        // no budget — just show what's been spent
+        if (spentCOP > 0) remParts.push(`<span class="cop">-${fmt(spentCOP, 'COP')}</span>`);
+        if (spentUSD > 0) remParts.push(`<span class="usd">-${fmt(spentUSD, 'USD')}</span>`);
+        if (remParts.length === 0) remParts.push('<span style="color:#9b9788;">Sin movimientos</span>');
+      }
+
+      // Detailed summary stats (shown when category is expanded)
+      const summaryStats = [];
+      if (budgetCOP > 0) {
+        summaryStats.push(`
+          <div class="stat">
+            <div class="stat-label">Presupuesto COP</div>
+            <div class="stat-value cop">${fmt(budgetCOP, 'COP')}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Gastado COP</div>
+            <div class="stat-value cop">${fmt(spentCOP, 'COP')}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Queda COP (${pctCOP.toFixed(0)}% usado)</div>
+            <div class="stat-value ${remCOP < 0 ? 'neg' : 'cop'}">${fmt(remCOP, 'COP')}</div>
+          </div>
+        `);
+      }
+      if (budgetUSD > 0) {
+        summaryStats.push(`
+          <div class="stat">
+            <div class="stat-label">Presupuesto USD</div>
+            <div class="stat-value usd">${fmt(budgetUSD, 'USD')}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Gastado USD</div>
+            <div class="stat-value usd">${fmt(spentUSD, 'USD')}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Queda USD (${pctUSD.toFixed(0)}% usado)</div>
+            <div class="stat-value ${remUSD < 0 ? 'neg' : 'usd'}">${fmt(remUSD, 'USD')}</div>
+          </div>
+        `);
+      }
+
+      let alertLine = '';
+      if (overCOP && overUSD) {
+        alertLine = `<div class="alert-line">Presupuesto agotado en ambas monedas: te excediste por ${fmt(Math.abs(remCOP), 'COP')} y ${fmt(Math.abs(remUSD), 'USD')}.</div>`;
+      } else if (overCOP) {
+        alertLine = `<div class="alert-line">Presupuesto en pesos agotado: te excediste por ${fmt(Math.abs(remCOP), 'COP')}.</div>`;
+      } else if (overUSD) {
+        alertLine = `<div class="alert-line">Presupuesto en dólares agotado: te excediste por ${fmt(Math.abs(remUSD), 'USD')}.</div>`;
+      } else if ((budgetCOP > 0 && pctCOP >= 90) || (budgetUSD > 0 && pctUSD >= 90)) {
+        alertLine = `<div class="alert-line" style="color:var(--accent);">Te queda poco margen en este presupuesto.</div>`;
+      }
+
+      return `
+        <div class="category-row" data-id="${cat.id}">
+          <div class="head" data-action="toggle-open" data-id="${cat.id}">
+            <span class="name-wrap">
+              <span class="name" data-role="cat-name-display" data-cat="${cat.id}">${escapeHtml(cat.name)}</span>
+              <input type="text" class="name-edit-input" value="${escapeHtml(cat.name)}" data-role="cat-name-input" data-cat="${cat.id}" style="display:none;">
+              <button class="icon-btn" data-action="edit-name" data-cat="${cat.id}" title="Editar nombre" aria-label="Editar nombre">✎</button>
+            </span>
+            <div class="balances-line">${remParts.join('')}</div>
+          </div>
+          ${ (budgetCOP > 0 || budgetUSD > 0) ? `
+          <div class="progress-track ${isOver ? 'over' : ''}">
+            ${budgetCOP > 0 ? `<div class="progress-fill cop" style="width:${pctCOP}%"></div>` : ''}
+            ${budgetUSD > 0 ? `<div class="progress-fill usd" style="width:${pctUSD}%"></div>` : ''}
+          </div>` : '' }
+          <div class="budget-line">${budgetLine}${movementCount > 0 ? ` · ${movementCount} movimiento${movementCount === 1 ? '' : 's'}` : ''}</div>
+          ${alertLine}
+
+          <div class="category-detail">
+            ${summaryStats.length ? `<div class="budget-summary">${summaryStats.join('')}</div>` : ''}
+            <div class="budget-edit-row" data-role="budget-edit-row" data-cat="${cat.id}" style="display:none;">
+              <span class="change-label">Presupuesto mensual:</span>
+              <div class="currency-input cop">
+                <span class="currency-badge cop">COP</span>
+                <input type="number" placeholder="0" min="0" step="1" value="${budgetCOP || ''}" data-role="budget-cop" data-cat="${cat.id}">
+              </div>
+              <div class="currency-input usd">
+                <span class="currency-badge usd">USD</span>
+                <input type="number" placeholder="0.00" min="0" step="0.01" value="${budgetUSD || ''}" data-role="budget-usd" data-cat="${cat.id}">
+              </div>
+              <button class="btn-secondary" data-action="save-budget" data-cat="${cat.id}">Guardar</button>
+            </div>
+            <div class="quick-add">
+              <input type="text" placeholder="Descripción del gasto" data-role="mov-desc" data-cat="${cat.id}">
+              <input type="number" placeholder="Monto" min="0" step="0.01" data-role="mov-amount" data-cat="${cat.id}">
+              <select data-role="mov-currency" data-cat="${cat.id}" data-budget-cop="${budgetCOP}" data-budget-usd="${budgetUSD}">
+                <option value="COP">COP</option>
+                <option value="USD">USD</option>
+              </select>
+              <button class="btn-primary" data-action="add-movement" data-cat="${cat.id}">Agregar</button>
+            </div>
+            <div class="conversion-row" data-role="conversion-row" data-cat="${cat.id}" style="display:none;">
+              <span class="change-label" data-role="conversion-label" data-cat="${cat.id}"></span>
+              <input type="number" placeholder="ej. 3600" min="0" step="0.01" data-role="mov-conversion-rate" data-cat="${cat.id}">
+              <span class="conversion-preview" data-role="conversion-preview" data-cat="${cat.id}"></span>
+            </div>
+            <div class="change-row">
+              <span class="change-label">Vuelto 1 (opcional):</span>
+              <input type="number" placeholder="Monto del vuelto" min="0" step="0.01" data-role="mov-change-amount-1" data-cat="${cat.id}">
+              <select data-role="mov-change-currency-1" data-cat="${cat.id}">
+                <option value="COP">COP</option>
+                <option value="USD">USD</option>
+              </select>
+            </div>
+            <div class="change-row">
+              <span class="change-label">Vuelto 2 (opcional):</span>
+              <input type="number" placeholder="Monto del vuelto" min="0" step="0.01" data-role="mov-change-amount-2" data-cat="${cat.id}">
+              <select data-role="mov-change-currency-2" data-cat="${cat.id}">
+                <option value="COP">COP</option>
+                <option value="USD">USD</option>
+              </select>
+            </div>
+            <div style="margin-top:10px;">
+              ${movementsHtml}
+            </div>
+            <div style="margin-top:10px; text-align:right;">
+              <button class="btn-tiny" data-action="delete-category" data-cat="${cat.id}">Eliminar categoría</button>
+            </div>
+          </div>
+        </div>
+      `;
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  function renderExchangeList() {
+    const container = document.getElementById('exchangeList');
+    if (state.exchanges.length === 0) {
+      container.innerHTML = '<p class="empty-msg">Sin cambios de moneda registrados. Si cambias dólares a pesos (o viceversa), regístralo aquí para que tus saldos generales queden correctos.</p>';
+      return;
+    }
+    container.innerHTML = state.exchanges.slice().reverse().map(ex => `
+      <div class="exchange-row">
+        <span class="desc">
+          ${fmt(Number(ex.fromAmount), ex.fromCurrency)}
+          <span class="arrow">→</span>
+          ${fmt(Number(ex.toAmount), ex.toCurrency)}
+          <span style="color:#9b9788;"> (tasa ${ex.rate})</span>
+        </span>
+        <button class="btn-tiny" data-action="delete-exchange" data-id="${ex.id}">Eliminar</button>
+      </div>
+    `).join('');
+  }
+
+  function renderAll() {
+    renderBalances();
+    renderReconcileHistory();
+    renderDistribution();
+    renderExchangeList();
+    renderIncomeList();
+    renderCategoryList();
+    saveToMemory();
+  }
+
+  // ---- Event wiring ----
+
+  // Rate
+  const rateInput = document.getElementById('rateInput');
+  rateInput.addEventListener('change', () => {
+    state.rate = rateInput.value ? Number(rateInput.value) : null;
+    saveToMemory();
+  });
+
+  // Income form toggle
+  const incomeForm = document.getElementById('incomeForm');
+  document.getElementById('toggleIncomeForm').addEventListener('click', () => {
+    incomeForm.style.display = incomeForm.style.display === 'none' ? 'block' : 'none';
+  });
+  document.getElementById('cancelIncome').addEventListener('click', () => {
+    incomeForm.style.display = 'none';
+    document.getElementById('incomeDesc').value = '';
+    document.getElementById('incomeAmount').value = '';
+  });
+  document.getElementById('saveIncome').addEventListener('click', () => {
+    const desc = document.getElementById('incomeDesc').value.trim();
+    const amount = Number(document.getElementById('incomeAmount').value);
+    const currency = document.getElementById('incomeCurrency').value;
+    if (!amount || amount <= 0) return;
+    state.incomes.push({ id: uid(), desc, amount, currency });
+    document.getElementById('incomeDesc').value = '';
+    document.getElementById('incomeAmount').value = '';
+    incomeForm.style.display = 'none';
+    renderAll();
+  });
+
+  // Exchange form toggle
+  const exchangeForm = document.getElementById('exchangeForm');
+  const exchFromAmount = document.getElementById('exchFromAmount');
+  const exchFromCurrency = document.getElementById('exchFromCurrency');
+  const exchRate = document.getElementById('exchRate');
+  const exchangeResult = document.getElementById('exchangeResult');
+
+  document.getElementById('toggleExchangeForm').addEventListener('click', () => {
+    exchangeForm.style.display = exchangeForm.style.display === 'none' ? 'block' : 'none';
+    if (exchangeForm.style.display === 'block' && !exchRate.value && state.rate) {
+      exchRate.value = state.rate;
+      updateExchangePreview();
+    }
+  });
+
+  function updateExchangePreview() {
+    const amount = Number(exchFromAmount.value);
+    const rate = Number(exchRate.value);
+    const from = exchFromCurrency.value;
+    const to = from === 'USD' ? 'COP' : 'USD';
+    if (!amount || !rate) {
+      exchangeResult.textContent = '';
+      return;
+    }
+    const result = from === 'USD' ? amount * rate : amount / rate;
+    exchangeResult.textContent = `Recibirás aprox. ${fmt(result, to)} en tu caja de ${to === 'COP' ? 'pesos' : 'dólares'}.`;
+  }
+  exchFromAmount.addEventListener('input', updateExchangePreview);
+  exchRate.addEventListener('input', updateExchangePreview);
+  exchFromCurrency.addEventListener('change', updateExchangePreview);
+
+  document.getElementById('cancelExchange').addEventListener('click', () => {
+    exchangeForm.style.display = 'none';
+    exchFromAmount.value = '';
+    exchRate.value = '';
+    exchangeResult.textContent = '';
+  });
+
+  document.getElementById('saveExchange').addEventListener('click', () => {
+    const fromAmount = Number(exchFromAmount.value);
+    const rate = Number(exchRate.value);
+    const fromCurrency = exchFromCurrency.value;
+    const toCurrency = fromCurrency === 'USD' ? 'COP' : 'USD';
+    if (!fromAmount || !rate) return;
+    const toAmount = fromCurrency === 'USD' ? fromAmount * rate : fromAmount / rate;
+    state.exchanges.push({
+      id: uid(),
+      fromAmount, fromCurrency,
+      toAmount, toCurrency,
+      rate
+    });
+    exchFromAmount.value = '';
+    exchRate.value = '';
+    exchangeResult.textContent = '';
+    exchangeForm.style.display = 'none';
+    renderAll();
+  });
+
+  // Reconciliation form
+  const reconcileForm = document.getElementById('reconcileForm');
+  const reconCOPInput = document.getElementById('reconCOP');
+  const reconUSDInput = document.getElementById('reconUSD');
+  const reconResult = document.getElementById('reconResult');
+  const reconAdjust = document.getElementById('reconAdjust');
+
+  document.getElementById('toggleReconcileForm').addEventListener('click', () => {
+    reconcileForm.style.display = reconcileForm.style.display === 'none' ? 'block' : 'none';
+    if (reconcileForm.style.display === 'block') updateReconPreview();
+  });
+
+  const RECON_THRESHOLD = { COP: 1, USD: 0.01 };
+
+  function updateReconPreview() {
+    const countedCOP = Number(reconCOPInput.value) || 0;
+    const countedUSD = Number(reconUSDInput.value) || 0;
+    const expectedCOP = getAvailable('COP');
+    const expectedUSD = getAvailable('USD');
+    const diffCOP = countedCOP - expectedCOP;
+    const diffUSD = countedUSD - expectedUSD;
+
+    function line(label, value, currency) {
+      return `<div class="recon-line"><span>${label}</span><span>${fmt(value, currency)}</span></div>`;
+    }
+    function diffLine(diff, currency) {
+      const cls = Math.abs(diff) < RECON_THRESHOLD[currency] ? 'ok' : 'bad';
+      const label = diff > 0 ? 'Te sobra' : diff < 0 ? 'Te falta' : 'Cuadra exacto';
+      return `<div class="recon-line diff ${cls}"><span>${label}</span><span>${fmt(Math.abs(diff), currency)}</span></div>`;
+    }
+
+    reconResult.innerHTML = `
+      ${line('Esperado (calculado por la app) en COP', expectedCOP, 'COP')}
+      ${diffLine(diffCOP, 'COP')}
+      ${line('Esperado (calculado por la app) en USD', expectedUSD, 'USD')}
+      ${diffLine(diffUSD, 'USD')}
+    `;
+
+    renderReconAdjustOptions(diffCOP, diffUSD);
+  }
+
+  // Builds the "what do I do about this difference" section for each
+  // currency where there's a meaningful surplus or shortage.
+  function renderReconAdjustOptions(diffCOP, diffUSD) {
+    const blocks = [];
+
+    function categoryOptions() {
+      if (!state.categories.length) {
+        return '<option value="">No hay categorías creadas</option>';
+      }
+      return state.categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    }
+
+    [['COP', diffCOP], ['USD', diffUSD]].forEach(([currency, diff]) => {
+      if (Math.abs(diff) < RECON_THRESHOLD[currency]) return;
+
+      if (diff > 0) {
+        // Surplus: probably an income that wasn't recorded.
+        blocks.push(`
+          <div class="adjust-block" data-currency="${currency}" data-kind="surplus">
+            <div class="adjust-title surplus">Te sobran ${fmt(diff, currency)}</div>
+            <div class="adjust-check">
+              <input type="checkbox" id="reconAdjustToggle_${currency}" data-role="recon-adjust-toggle" data-currency="${currency}">
+              <label for="reconAdjustToggle_${currency}" style="margin:0;">Registrar como ingreso no anotado</label>
+            </div>
+            <label>Descripción (opcional)</label>
+            <input type="text" data-role="recon-adjust-desc" data-currency="${currency}" placeholder="Ej: vueltos, propina, venta sin registrar">
+          </div>
+        `);
+      } else {
+        // Shortage: probably an expense that wasn't recorded.
+        blocks.push(`
+          <div class="adjust-block" data-currency="${currency}" data-kind="shortage">
+            <div class="adjust-title shortage">Te faltan ${fmt(Math.abs(diff), currency)}</div>
+            <div class="adjust-check">
+              <input type="checkbox" id="reconAdjustToggle_${currency}" data-role="recon-adjust-toggle" data-currency="${currency}">
+              <label for="reconAdjustToggle_${currency}" style="margin:0;">Registrar como gasto sin anotar</label>
+            </div>
+            <label>Categoría a la que descontarlo</label>
+            <select data-role="recon-adjust-cat" data-currency="${currency}">${categoryOptions()}</select>
+            <label>Descripción (opcional)</label>
+            <input type="text" data-role="recon-adjust-desc" data-currency="${currency}" placeholder="Ej: algo que compré y no anoté">
+          </div>
+        `);
+      }
+    });
+
+    if (!blocks.length) {
+      reconAdjust.style.display = 'none';
+      reconAdjust.innerHTML = '';
+      return;
+    }
+
+    reconAdjust.style.display = 'block';
+    reconAdjust.innerHTML = `<div class="recon-hint" style="margin-bottom:8px;">¿Qué quieres hacer con la diferencia?</div>` + blocks.join('');
+  }
+
+  reconCOPInput.addEventListener('input', updateReconPreview);
+  reconUSDInput.addEventListener('input', updateReconPreview);
+
+  document.getElementById('cancelReconcile').addEventListener('click', () => {
+    reconcileForm.style.display = 'none';
+    reconCOPInput.value = '';
+    reconUSDInput.value = '';
+    reconResult.innerHTML = '';
+    reconAdjust.innerHTML = '';
+    reconAdjust.style.display = 'none';
+  });
+
+  document.getElementById('saveReconcile').addEventListener('click', () => {
+    const countedCOP = Number(reconCOPInput.value) || 0;
+    const countedUSD = Number(reconUSDInput.value) || 0;
+    const expectedCOP = getAvailable('COP');
+    const expectedUSD = getAvailable('USD');
+    const diffCOP = countedCOP - expectedCOP;
+    const diffUSD = countedUSD - expectedUSD;
+
+    const adjustments = [];
+
+    ['COP', 'USD'].forEach(currency => {
+      const diff = currency === 'COP' ? diffCOP : diffUSD;
+      if (Math.abs(diff) < RECON_THRESHOLD[currency]) return;
+
+      const toggle = document.querySelector(`[data-role="recon-adjust-toggle"][data-currency="${currency}"]`);
+      if (!toggle || !toggle.checked) return;
+
+      const descInput = document.querySelector(`[data-role="recon-adjust-desc"][data-currency="${currency}"]`);
+      const customDesc = descInput ? descInput.value.trim() : '';
+
+      if (diff > 0) {
+        // Surplus -> record as an unaccounted income.
+        const desc = customDesc || 'Ajuste por sobrante de caja';
+        state.incomes.push({ id: uid(), desc, amount: diff, currency });
+        adjustments.push({ type: 'income', currency, amount: diff, desc });
+      } else {
+        // Shortage -> record as an expense movement in the chosen category.
+        const catSelect = document.querySelector(`[data-role="recon-adjust-cat"][data-currency="${currency}"]`);
+        const catId = catSelect ? catSelect.value : '';
+        const cat = state.categories.find(c => c.id === catId);
+        if (cat) {
+          const desc = customDesc || 'Ajuste por faltante de caja';
+          const movement = { id: uid(), desc, amount: Math.abs(diff), currency };
+          cat.movements.push(movement);
+          adjustments.push({ type: 'expense', currency, amount: Math.abs(diff), desc, categoryId: cat.id, categoryName: cat.name });
+        }
+      }
+    });
+
+    state.reconciliations.push({
+      id: uid(),
+      date: new Date().toISOString(),
+      countedCOP, countedUSD,
+      expectedCOP, expectedUSD,
+      diffCOP, diffUSD,
+      adjustments
+    });
+
+    reconCOPInput.value = '';
+    reconUSDInput.value = '';
+    reconResult.innerHTML = '';
+    reconAdjust.innerHTML = '';
+    reconAdjust.style.display = 'none';
+    reconcileForm.style.display = 'none';
+    renderAll();
+  });
+
+  // Category form toggle
+  const categoryForm = document.getElementById('categoryForm');
+  document.getElementById('toggleCategoryForm').addEventListener('click', () => {
+    categoryForm.style.display = categoryForm.style.display === 'none' ? 'block' : 'none';
+  });
+  document.getElementById('cancelCategory').addEventListener('click', () => {
+    categoryForm.style.display = 'none';
+    document.getElementById('catName').value = '';
+    document.getElementById('catBudgetCOP').value = '';
+    document.getElementById('catBudgetUSD').value = '';
+    document.getElementById('catGroup').value = 'variables';
+  });
+  document.getElementById('saveCategory').addEventListener('click', () => {
+    const name = document.getElementById('catName').value.trim();
+    const budgetCOP = Number(document.getElementById('catBudgetCOP').value) || 0;
+    const budgetUSD = Number(document.getElementById('catBudgetUSD').value) || 0;
+    const group = document.getElementById('catGroup').value;
+    if (!name) return;
+    state.categories.push({ id: uid(), name, budgetCOP, budgetUSD, movements: [], group });
+    document.getElementById('catName').value = '';
+    document.getElementById('catBudgetCOP').value = '';
+    document.getElementById('catBudgetUSD').value = '';
+    categoryForm.style.display = 'none';
+    renderAll();
+  });
+
+  // Delegated clicks for dynamic content
+  document.addEventListener('click', (e) => {
+    const action = e.target.getAttribute('data-action');
+    if (!action) {
+      if (e.target.matches('[data-role="cat-name-input"]')) return;
+      // check if click was on .head but not on a button (toggle open)
+      const head = e.target.closest('[data-action="toggle-open"]');
+      if (head) {
+        const row = head.closest('.category-row');
+        row.classList.toggle('open');
+      }
+      return;
+    }
+
+    switch (action) {
+      case 'delete-income': {
+        const id = e.target.getAttribute('data-id');
+        state.incomes = state.incomes.filter(i => i.id !== id);
+        renderAll();
+        break;
+      }
+      case 'delete-exchange': {
+        const id = e.target.getAttribute('data-id');
+        state.exchanges = state.exchanges.filter(ex => ex.id !== id);
+        renderAll();
+        break;
+      }
+      case 'delete-reconcile': {
+        const id = e.target.getAttribute('data-id');
+        state.reconciliations = state.reconciliations.filter(r => r.id !== id);
+        renderAll();
+        break;
+      }
+      case 'delete-category': {
+        const catId = e.target.getAttribute('data-cat');
+        if (confirm('¿Eliminar esta categoría y todos sus gastos registrados?')) {
+          state.categories = state.categories.filter(c => c.id !== catId);
+          renderAll();
+        }
+        break;
+      }
+      case 'edit-name': {
+        e.stopPropagation();
+        const catId = e.target.getAttribute('data-cat');
+        const display = document.querySelector(`[data-role="cat-name-display"][data-cat="${catId}"]`);
+        const input = document.querySelector(`[data-role="cat-name-input"][data-cat="${catId}"]`);
+        const budgetRow = document.querySelector(`[data-role="budget-edit-row"][data-cat="${catId}"]`);
+        if (display && input) {
+          display.style.display = 'none';
+          e.target.style.display = 'none';
+          input.style.display = 'inline-block';
+          input.focus();
+          input.select();
+        }
+        if (budgetRow) budgetRow.style.display = 'flex';
+        // make sure the category is expanded so the budget row is visible
+        const row = document.querySelector(`.category-row[data-id="${catId}"]`);
+        if (row) row.classList.add('open');
+        break;
+      }
+      case 'save-budget': {
+        const catId = e.target.getAttribute('data-cat');
+        const cat = state.categories.find(c => c.id === catId);
+        if (!cat) break;
+        const nameInput = document.querySelector(`[data-role="cat-name-input"][data-cat="${catId}"]`);
+        const copInput = document.querySelector(`[data-role="budget-cop"][data-cat="${catId}"]`);
+        const usdInput = document.querySelector(`[data-role="budget-usd"][data-cat="${catId}"]`);
+        const newName = nameInput.value.trim();
+        if (newName) cat.name = newName;
+        cat.budgetCOP = Number(copInput.value) || 0;
+        cat.budgetUSD = Number(usdInput.value) || 0;
+        renderAll();
+        const row = document.querySelector(`.category-row[data-id="${catId}"]`);
+        if (row) row.classList.add('open');
+        break;
+      }
+      case 'delete-movement': {
+        const catId = e.target.getAttribute('data-cat');
+        const movId = e.target.getAttribute('data-mov');
+        const cat = state.categories.find(c => c.id === catId);
+        if (cat) {
+          cat.movements = cat.movements.filter(m => m.id !== movId);
+          renderAll();
+          // re-open the category after re-render
+          const row = document.querySelector(`.category-row[data-id="${catId}"]`);
+          if (row) row.classList.add('open');
+        }
+        break;
+      }
+      case 'convert-movement': {
+        const catId = e.target.getAttribute('data-cat');
+        const movId = e.target.getAttribute('data-mov');
+        const targetCurrency = e.target.getAttribute('data-target');
+        const cat = state.categories.find(c => c.id === catId);
+        const mov = cat && cat.movements.find(m => m.id === movId);
+        if (!mov) break;
+
+        const defaultRate = state.rate || '';
+        const rateInput = prompt(
+          `¿A qué tasa quieres convertir este gasto de ${fmt(Number(mov.amount), mov.currency)} a ${targetCurrency}? (1 USD = X COP)`,
+          defaultRate
+        );
+        if (rateInput === null) break;
+        const rate = Number(rateInput);
+        if (!rate || rate <= 0) {
+          alert('Tasa inválida.');
+          break;
+        }
+
+        let converted;
+        if (mov.currency === 'COP' && targetCurrency === 'USD') {
+          converted = Number(mov.amount) / rate;
+        } else if (mov.currency === 'USD' && targetCurrency === 'COP') {
+          converted = Number(mov.amount) * rate;
+        } else {
+          break;
+        }
+
+        mov.budgetCurrency = targetCurrency;
+        mov.budgetAmount = converted;
+        mov.conversionRate = rate;
+        renderAll();
+        const row = document.querySelector(`.category-row[data-id="${catId}"]`);
+        if (row) row.classList.add('open');
+        break;
+      }
+      case 'add-movement': {
+        const catId = e.target.getAttribute('data-cat');
+        const cat = state.categories.find(c => c.id === catId);
+        const descInput = document.querySelector(`[data-role="mov-desc"][data-cat="${catId}"]`);
+        const amountInput = document.querySelector(`[data-role="mov-amount"][data-cat="${catId}"]`);
+        const currencySelect = document.querySelector(`[data-role="mov-currency"][data-cat="${catId}"]`);
+        const changeAmountInput1 = document.querySelector(`[data-role="mov-change-amount-1"][data-cat="${catId}"]`);
+        const changeCurrencySelect1 = document.querySelector(`[data-role="mov-change-currency-1"][data-cat="${catId}"]`);
+        const changeAmountInput2 = document.querySelector(`[data-role="mov-change-amount-2"][data-cat="${catId}"]`);
+        const changeCurrencySelect2 = document.querySelector(`[data-role="mov-change-currency-2"][data-cat="${catId}"]`);
+        const conversionRow = document.querySelector(`[data-role="conversion-row"][data-cat="${catId}"]`);
+        const conversionRateInput = document.querySelector(`[data-role="mov-conversion-rate"][data-cat="${catId}"]`);
+        const desc = descInput.value.trim();
+        const amount = Number(amountInput.value);
+        const currency = currencySelect.value;
+        if (!amount || amount <= 0) return;
+
+        const movement = { id: uid(), desc, amount, currency };
+
+        // If a conversion is needed (expense currency differs from the
+        // category's budget currency), require a rate before saving.
+        if (conversionRow && conversionRow.style.display !== 'none') {
+          const budgetCurrency = conversionRow.getAttribute('data-budget-currency');
+          const rate = Number(conversionRateInput.value);
+          if (!rate || rate <= 0) {
+            alert('Ingresa la tasa de conversión para este gasto, así sabemos cuánto descontar del presupuesto en ' + (budgetCurrency === 'USD' ? 'dólares' : 'pesos') + '.');
+            return;
+          }
+          let converted;
+          if (currency === 'COP' && budgetCurrency === 'USD') {
+            converted = amount / rate;
+          } else if (currency === 'USD' && budgetCurrency === 'COP') {
+            converted = amount * rate;
+          }
+          movement.budgetCurrency = budgetCurrency;
+          movement.budgetAmount = converted;
+          movement.conversionRate = rate;
+        }
+
+        const changes = [];
+        const changeAmount1 = Number(changeAmountInput1.value);
+        if (changeAmount1 > 0) changes.push({ amount: changeAmount1, currency: changeCurrencySelect1.value });
+        const changeAmount2 = Number(changeAmountInput2.value);
+        if (changeAmount2 > 0) changes.push({ amount: changeAmount2, currency: changeCurrencySelect2.value });
+        if (changes.length) movement.changes = changes;
+
+        cat.movements.push(movement);
+        renderAll();
+        // re-open and clear inputs
+        const row = document.querySelector(`.category-row[data-id="${catId}"]`);
+        if (row) row.classList.add('open');
+        const newDesc = document.querySelector(`[data-role="mov-desc"][data-cat="${catId}"]`);
+        const newAmount = document.querySelector(`[data-role="mov-amount"][data-cat="${catId}"]`);
+        const newChangeAmount1 = document.querySelector(`[data-role="mov-change-amount-1"][data-cat="${catId}"]`);
+        const newChangeAmount2 = document.querySelector(`[data-role="mov-change-amount-2"][data-cat="${catId}"]`);
+        const newConversionRate = document.querySelector(`[data-role="mov-conversion-rate"][data-cat="${catId}"]`);
+        if (newDesc) newDesc.value = '';
+        if (newAmount) newAmount.value = '';
+        if (newChangeAmount1) newChangeAmount1.value = '';
+        if (newChangeAmount2) newChangeAmount2.value = '';
+        if (newConversionRate) newConversionRate.value = '';
+        if (newDesc) newDesc.focus();
+        break;
+      }
+    }
+  });
+
+  // Enter key on quick-add amount triggers add
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.matches('[data-role="mov-amount"], [data-role="mov-desc"]')) {
+      const catId = e.target.getAttribute('data-cat');
+      const btn = document.querySelector(`[data-action="add-movement"][data-cat="${catId}"]`);
+      if (btn) btn.click();
+    }
+    if (e.key === 'Enter' && e.target.matches('[data-role="cat-name-input"]')) {
+      const catId = e.target.getAttribute('data-cat');
+      const btn = document.querySelector(`[data-action="save-budget"][data-cat="${catId}"]`);
+      if (btn) btn.click();
+    }
+  });
+
+  // Conversion row: shown when the expense currency differs from the
+  // category's budget currency, so the user can convert it for budget tracking.
+  function updateConversionRow(catId) {
+    const select = document.querySelector(`[data-role="mov-currency"][data-cat="${catId}"]`);
+    const row = document.querySelector(`[data-role="conversion-row"][data-cat="${catId}"]`);
+    const label = document.querySelector(`[data-role="conversion-label"][data-cat="${catId}"]`);
+    const rateInput = document.querySelector(`[data-role="mov-conversion-rate"][data-cat="${catId}"]`);
+    const preview = document.querySelector(`[data-role="conversion-preview"][data-cat="${catId}"]`);
+    if (!select || !row) return;
+
+    const budgetCOP = Number(select.getAttribute('data-budget-cop')) || 0;
+    const budgetUSD = Number(select.getAttribute('data-budget-usd')) || 0;
+    const movCurrency = select.value;
+
+    // Determine if conversion is needed: category has a budget only in
+    // the OTHER currency than the one selected for this expense.
+    let needsConversion = false;
+    let budgetCurrency = null;
+    if (movCurrency === 'COP' && budgetUSD > 0 && budgetCOP === 0) {
+      needsConversion = true;
+      budgetCurrency = 'USD';
+    } else if (movCurrency === 'USD' && budgetCOP > 0 && budgetUSD === 0) {
+      needsConversion = true;
+      budgetCurrency = 'COP';
+    }
+
+    if (!needsConversion) {
+      row.style.display = 'none';
+      if (rateInput) rateInput.value = '';
+      if (preview) preview.textContent = '';
+      return;
+    }
+
+    row.style.display = 'flex';
+    row.setAttribute('data-budget-currency', budgetCurrency);
+    if (label) {
+      label.textContent = movCurrency === 'COP'
+        ? `Este gasto en pesos descontará del presupuesto en USD. 1 USD =`
+        : `Este gasto en dólares descontará del presupuesto en COP. 1 USD =`;
+    }
+    if (rateInput && !rateInput.value && state.rate) {
+      rateInput.value = state.rate;
+    }
+    updateConversionPreview(catId);
+  }
+
+  function updateConversionPreview(catId) {
+    const select = document.querySelector(`[data-role="mov-currency"][data-cat="${catId}"]`);
+    const amountInput = document.querySelector(`[data-role="mov-amount"][data-cat="${catId}"]`);
+    const rateInput = document.querySelector(`[data-role="mov-conversion-rate"][data-cat="${catId}"]`);
+    const preview = document.querySelector(`[data-role="conversion-preview"][data-cat="${catId}"]`);
+    const row = document.querySelector(`[data-role="conversion-row"][data-cat="${catId}"]`);
+    if (!select || !rateInput || !preview || !row || row.style.display === 'none') return;
+
+    const movCurrency = select.value;
+    const amount = Number(amountInput.value);
+    const rate = Number(rateInput.value);
+    if (!amount || !rate) {
+      preview.textContent = '';
+      return;
+    }
+    const budgetCurrency = row.getAttribute('data-budget-currency');
+    let converted;
+    if (movCurrency === 'COP' && budgetCurrency === 'USD') {
+      converted = amount / rate;
+    } else if (movCurrency === 'USD' && budgetCurrency === 'COP') {
+      converted = amount * rate;
+    }
+    if (converted != null) {
+      preview.textContent = `Equivale a ${fmt(converted, budgetCurrency)} de presupuesto.`;
+    }
+  }
+
+  document.addEventListener('change', (e) => {
+    if (e.target.matches('[data-role="mov-currency"]')) {
+      const catId = e.target.getAttribute('data-cat');
+      updateConversionRow(catId);
+    }
+  });
+  document.addEventListener('input', (e) => {
+    if (e.target.matches('[data-role="mov-amount"], [data-role="mov-conversion-rate"]')) {
+      const catId = e.target.getAttribute('data-cat');
+      updateConversionPreview(catId);
+    }
+  });
+
+  // Export
+  function buildExportFile() {
+    const today = new Date().toISOString().slice(0, 10);
+    const filename = `doblecaja-${today}.json`;
+    const json = JSON.stringify(state, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    return { blob, filename };
+  }
+
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    const { blob, filename } = buildExportFile();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  // Share button (mobile): uses Web Share API with files if available
+  const shareBtn = document.getElementById('shareBtn');
+  (function setupShareButton() {
+    try {
+      const { blob, filename } = buildExportFile();
+      const testFile = new File([blob], filename, { type: 'application/json' });
+      if (navigator.canShare && navigator.canShare({ files: [testFile] })) {
+        shareBtn.style.display = 'inline-block';
+      }
+    } catch (e) {
+      // Web Share API not supported, keep button hidden
+    }
+  })();
+
+  shareBtn.addEventListener('click', async () => {
+    try {
+      const { blob, filename } = buildExportFile();
+      const file = new File([blob], filename, { type: 'application/json' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Respaldo Doble Caja',
+          text: `Respaldo de Doble Caja - ${filename}`
+        });
+      }
+    } catch (e) {
+      // user cancelled share or it failed silently
+    }
+  });
+
+  // Import
+  const importFile = document.getElementById('importFile');
+  document.getElementById('importBtn').addEventListener('click', () => importFile.click());
+  importFile.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (!data.incomes || !data.categories) throw new Error('Formato inválido');
+        state = {
+          rate: data.rate || null,
+          incomes: data.incomes || [],
+          exchanges: data.exchanges || [],
+          reconciliations: data.reconciliations || [],
+          categories: data.categories || []
+        };
+        rateInput.value = state.rate || '';
+        renderAll();
+      } catch (err) {
+        alert('No se pudo leer el archivo. Asegúrate de que sea un archivo exportado desde Doble Caja.');
+      }
+    };
+    reader.readAsText(file);
+    importFile.value = '';
+  });
+
+  // Init
+  loadFromMemory();
+  if (state.rate) rateInput.value = state.rate;
+  renderAll();
+})();
+</script>
+</body>
+</html>
