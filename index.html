@@ -143,6 +143,8 @@
     justify-content: space-between;
     align-items: center;
     margin: 28px 0 12px;
+    cursor: pointer;
+    user-select: none;
   }
   .section-head h2 {
     font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
@@ -152,6 +154,29 @@
     font-weight: 700;
     margin: 0;
     color: #4a463b;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-head .section-arrow {
+    font-size: 0.8rem;
+    transition: transform 0.18s ease;
+    display: inline-block;
+    color: #9b9788;
+  }
+  .section-head.open .section-arrow {
+    transform: rotate(90deg);
+  }
+  .section-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-body {
+    display: none;
+  }
+  .section-body.open {
+    display: block;
   }
 
   /* Buttons */
@@ -248,6 +273,26 @@
   .category-row .icon-btn:hover {
     color: var(--accent);
     background: var(--paper-2);
+  }
+  .order-arrows {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .order-btn {
+    font-size: 0.55rem !important;
+    padding: 0 3px !important;
+    line-height: 1.3 !important;
+  }
+  .order-btn:disabled {
+    opacity: 0.25;
+    cursor: default;
+  }
+  .order-btn:disabled:hover {
+    color: #b3afa1 !important;
+    background: transparent !important;
   }
   .category-row .name-edit-input {
     font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
@@ -462,6 +507,44 @@
   }
   .recon-result .ok { color: var(--cop-color); }
   .recon-result .bad { color: var(--danger); }
+
+  .contributions-block {
+    margin-bottom: 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .contributions-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--paper-2);
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+  }
+  .contributions-header .toggle-arrow {
+    transition: transform 0.15s ease;
+    font-weight: 400;
+  }
+  .contributions-header.open .toggle-arrow {
+    transform: rotate(180deg);
+  }
+  .contributions-body {
+    padding: 10px 12px;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+  }
+  .contrib-hint {
+    font-size: 0.76rem;
+    color: #80796a;
+    margin: 0 0 8px;
+  }
+  .contribution-row .amt {
+    font-weight: 600;
+  }
+
 
   .recon-adjust {
     margin-top: 12px;
@@ -891,10 +974,13 @@
     </div>
   </div>
 
-  <div class="section-head">
-    <h2>Conciliación de efectivo</h2>
-    <button class="btn-secondary" id="toggleReconcileForm">+ Contar efectivo</button>
+  <div class="section-head" data-action="toggle-section" data-section="reconcile">
+    <h2><span class="section-arrow">▸</span>Conciliación de efectivo</h2>
+    <div class="section-head-actions">
+      <button class="btn-secondary" id="toggleReconcileForm">+ Contar efectivo</button>
+    </div>
   </div>
+  <div class="section-body" id="section-reconcile">
 
   <div class="new-reconcile-form" id="reconcileForm" style="display:none;">
     <p class="recon-hint">Ingresa el efectivo que acabas de contar. Lo comparamos con lo que la app calcula que deberías tener.</p>
@@ -917,17 +1003,23 @@
   </div>
 
   <div id="reconcileHistory"></div>
-
-  <div class="section-head">
-    <h2>Distribución del presupuesto</h2>
   </div>
+
+  <div class="section-head" data-action="toggle-section" data-section="distribution">
+    <h2><span class="section-arrow">▸</span>Distribución del presupuesto</h2>
+  </div>
+  <div class="section-body" id="section-distribution">
   <div id="distributionSummary"></div>
   <div id="distributionTable"></div>
-
-  <div class="section-head">
-    <h2>Cambios de moneda</h2>
-    <button class="btn-secondary" id="toggleExchangeForm">+ Registrar cambio</button>
   </div>
+
+  <div class="section-head" data-action="toggle-section" data-section="exchange">
+    <h2><span class="section-arrow">▸</span>Cambios de moneda</h2>
+    <div class="section-head-actions">
+      <button class="btn-secondary" id="toggleExchangeForm">+ Registrar cambio</button>
+    </div>
+  </div>
+  <div class="section-body" id="section-exchange">
 
   <div class="new-exchange-form" id="exchangeForm" style="display:none;">
     <div class="exchange-form-row">
@@ -950,11 +1042,15 @@
   </div>
 
   <div id="exchangeList"></div>
-
-  <div class="section-head">
-    <h2>Ingresos</h2>
-    <button class="btn-secondary" id="toggleIncomeForm">+ Agregar ingreso</button>
   </div>
+
+  <div class="section-head" data-action="toggle-section" data-section="income">
+    <h2><span class="section-arrow">▸</span>Ingresos</h2>
+    <div class="section-head-actions">
+      <button class="btn-secondary" id="toggleIncomeForm">+ Agregar ingreso</button>
+    </div>
+  </div>
+  <div class="section-body" id="section-income">
 
   <div class="new-income-form" id="incomeForm" style="display:none;">
     <div class="form-grid">
@@ -974,11 +1070,15 @@
   </div>
 
   <div id="incomeList"></div>
-
-  <div class="section-head">
-    <h2>Categorías de gasto</h2>
-    <button class="btn-secondary" id="toggleCategoryForm">+ Nueva categoría</button>
   </div>
+
+  <div class="section-head" data-action="toggle-section" data-section="categories">
+    <h2><span class="section-arrow">▸</span>Categorías de gasto</h2>
+    <div class="section-head-actions">
+      <button class="btn-secondary" id="toggleCategoryForm">+ Nueva categoría</button>
+    </div>
+  </div>
+  <div class="section-body" id="section-categories">
 
   <div class="new-category-form" id="categoryForm" style="display:none;">
     <div class="form-grid">
@@ -1002,6 +1102,8 @@
   </div>
 
   <div id="categoryList"></div>
+  </div>
+
 
   <div class="footer-actions">
     <button class="btn-secondary" id="shareBtn" style="display:none;">Compartir respaldo (.json)</button>
@@ -1015,6 +1117,17 @@
 <script>
 (function () {
   const STORAGE_KEY = 'doblecaja_data_v1';
+
+  // UI-only state: which sections/categories/contribution-panels are
+  // expanded right now. Lives only in memory (not persisted to
+  // localStorage/Firebase) and is read by every render so that adding
+  // an income/expense/contribution never collapses something the user
+  // had open — only an explicit click on a header toggles it.
+  const uiState = {
+    sections: {},        // { reconcile: true, distribution: false, ... }
+    openCategories: {},  // { [categoryId]: true }
+    openContributions: {} // { [categoryId]: true }
+  };
 
   let state = {
     rate: null,
@@ -1045,7 +1158,11 @@
           incomes: loaded.incomes || [],
           exchanges: loaded.exchanges || [],
           reconciliations: loaded.reconciliations || [],
-          categories: loaded.categories || []
+          categories: (loaded.categories || []).map(c => ({
+            ...c,
+            movements: c.movements || [],
+            contributions: c.contributions || []
+          }))
         };
       }
     } catch (e) { /* ignore */ }
@@ -1127,7 +1244,8 @@
           reconciliations: toArray(remote.reconciliations),
           categories: toArray(remote.categories).map(c => ({
             ...c,
-            movements: toArray(c.movements)
+            movements: toArray(c.movements),
+            contributions: toArray(c.contributions)
           }))
         };
         lastSavedJson = JSON.stringify(state);
@@ -1237,9 +1355,21 @@
       .reduce((s, impact) => s + impact.amount, 0);
   }
 
+  // Effective budget for a category = the base monthly budget + any
+  // contributions earmarked for it (e.g. change/surplus money the user
+  // explicitly decided to assign to this category).
+  function categoryContributions(cat, currency) {
+    return (cat.contributions || [])
+      .filter(c => c.currency === currency)
+      .reduce((s, c) => s + Number(c.amount), 0);
+  }
+  function categoryBudget(cat, currency) {
+    const base = Number(currency === 'COP' ? cat.budgetCOP : cat.budgetUSD) || 0;
+    return base + categoryContributions(cat, currency);
+  }
+
   function totalBudgeted(currency) {
-    const key = currency === 'COP' ? 'budgetCOP' : 'budgetUSD';
-    return state.categories.reduce((s, c) => s + (Number(c[key]) || 0), 0);
+    return state.categories.reduce((s, c) => s + categoryBudget(c, currency), 0);
   }
 
   function budgetSpentTotal(currency) {
@@ -1413,8 +1543,8 @@
     const rows = state.categories.map(cat => {
       const spentCOP = categorySpent(cat, 'COP');
       const spentUSD = categorySpent(cat, 'USD');
-      const budgetCOP = Number(cat.budgetCOP) || 0;
-      const budgetUSD = Number(cat.budgetUSD) || 0;
+      const budgetCOP = categoryBudget(cat, 'COP');
+      const budgetUSD = categoryBudget(cat, 'USD');
       const remCOP = budgetCOP - spentCOP;
       const remUSD = budgetUSD - spentUSD;
 
@@ -1496,31 +1626,20 @@
       return;
     }
 
-    const fijos = state.categories.filter(c => c.group === 'fijos');
-    const variables = state.categories.filter(c => c.group === 'variables');
-    const otras = state.categories.filter(c => c.group !== 'fijos' && c.group !== 'variables');
-
-    let html = '';
-    if (fijos.length) {
-      html += `<div class="group-head">Gastos fijos mensuales (en dólares)</div>`;
-      html += fijos.map(renderCategory).join('');
-    }
-    if (variables.length) {
-      html += `<div class="group-head">Gastos variables por quincena (en pesos)</div>`;
-      html += variables.map(renderCategory).join('');
-    }
-    if (otras.length) {
-      html += fijos.length || variables.length ? `<div class="group-head">Otras categorías</div>` : '';
-      html += otras.map(renderCategory).join('');
-    }
-    container.innerHTML = html;
+    container.innerHTML = state.categories.map((cat, idx) => renderCategory(cat, idx, state.categories.length)).join('');
   }
 
-  function renderCategory(cat) {
+  function renderCategory(cat, idx, total) {
+      const isCatOpen = !!uiState.openCategories[cat.id];
+      const isContribOpen = !!uiState.openContributions[cat.id];
       const spentCOP = categorySpent(cat, 'COP');
       const spentUSD = categorySpent(cat, 'USD');
-      const budgetCOP = Number(cat.budgetCOP) || 0;
-      const budgetUSD = Number(cat.budgetUSD) || 0;
+      const baseBudgetCOP = Number(cat.budgetCOP) || 0;
+      const baseBudgetUSD = Number(cat.budgetUSD) || 0;
+      const contribCOP = categoryContributions(cat, 'COP');
+      const contribUSD = categoryContributions(cat, 'USD');
+      const budgetCOP = baseBudgetCOP + contribCOP;
+      const budgetUSD = baseBudgetUSD + contribUSD;
       const remCOP = budgetCOP - spentCOP;
       const remUSD = budgetUSD - spentUSD;
 
@@ -1569,8 +1688,12 @@
         : '<p class="empty-msg" style="padding:8px 0;">Sin gastos registrados aún.</p>';
 
       const budgetLineParts = [];
-      if (budgetCOP > 0) budgetLineParts.push(`Presupuesto: ${fmt(budgetCOP, 'COP')}`);
-      if (budgetUSD > 0) budgetLineParts.push(`Presupuesto: ${fmt(budgetUSD, 'USD')}`);
+      if (budgetCOP > 0) {
+        budgetLineParts.push(`Presupuesto: ${fmt(budgetCOP, 'COP')}${contribCOP > 0 ? ` (${fmt(baseBudgetCOP, 'COP')} + ${fmt(contribCOP, 'COP')} aportes)` : ''}`);
+      }
+      if (budgetUSD > 0) {
+        budgetLineParts.push(`Presupuesto: ${fmt(budgetUSD, 'USD')}${contribUSD > 0 ? ` (${fmt(baseBudgetUSD, 'USD')} + ${fmt(contribUSD, 'USD')} aportes)` : ''}`);
+      }
       const budgetLine = budgetLineParts.length ? budgetLineParts.join(' · ') : 'Sin presupuesto definido';
 
       const remParts = [];
@@ -1588,7 +1711,7 @@
       if (budgetCOP > 0) {
         summaryStats.push(`
           <div class="stat">
-            <div class="stat-label">Presupuesto COP</div>
+            <div class="stat-label">Presupuesto COP${contribCOP > 0 ? ` (${fmt(baseBudgetCOP, 'COP')} base + ${fmt(contribCOP, 'COP')} aportes)` : ''}</div>
             <div class="stat-value cop">${fmt(budgetCOP, 'COP')}</div>
           </div>
           <div class="stat">
@@ -1604,7 +1727,7 @@
       if (budgetUSD > 0) {
         summaryStats.push(`
           <div class="stat">
-            <div class="stat-label">Presupuesto USD</div>
+            <div class="stat-label">Presupuesto USD${contribUSD > 0 ? ` (${fmt(baseBudgetUSD, 'USD')} base + ${fmt(contribUSD, 'USD')} aportes)` : ''}</div>
             <div class="stat-value usd">${fmt(budgetUSD, 'USD')}</div>
           </div>
           <div class="stat">
@@ -1630,9 +1753,13 @@
       }
 
       return `
-        <div class="category-row" data-id="${cat.id}">
+        <div class="category-row ${isCatOpen ? 'open' : ''}" data-id="${cat.id}">
           <div class="head" data-action="toggle-open" data-id="${cat.id}">
             <span class="name-wrap">
+              <span class="order-arrows">
+                <button class="icon-btn order-btn" data-action="move-category-up" data-cat="${cat.id}" title="Subir" aria-label="Subir" ${idx === 0 ? 'disabled' : ''}>▲</button>
+                <button class="icon-btn order-btn" data-action="move-category-down" data-cat="${cat.id}" title="Bajar" aria-label="Bajar" ${idx === total - 1 ? 'disabled' : ''}>▼</button>
+              </span>
               <span class="name" data-role="cat-name-display" data-cat="${cat.id}">${escapeHtml(cat.name)}</span>
               <input type="text" class="name-edit-input" value="${escapeHtml(cat.name)}" data-role="cat-name-input" data-cat="${cat.id}" style="display:none;">
               <button class="icon-btn" data-action="edit-name" data-cat="${cat.id}" title="Editar nombre" aria-label="Editar nombre">✎</button>
@@ -1660,6 +1787,33 @@
                 <input type="number" placeholder="0.00" min="0" step="0.01" value="${budgetUSD || ''}" data-role="budget-usd" data-cat="${cat.id}">
               </div>
               <button class="btn-secondary" data-action="save-budget" data-cat="${cat.id}">Guardar</button>
+            </div>
+            <div class="contributions-block">
+              <div class="contributions-header ${isContribOpen ? 'open' : ''}" data-action="toggle-contributions" data-cat="${cat.id}">
+                <span>+ Aportes al presupuesto${(cat.contributions || []).length ? ` (${cat.contributions.length})` : ''}</span>
+                <span class="toggle-arrow">▾</span>
+              </div>
+              <div class="contributions-body" data-role="contributions-body" data-cat="${cat.id}" style="display:${isContribOpen ? 'block' : 'none'};">
+                <p class="contrib-hint">Dinero extra que decidiste destinar a esta categoría (vueltos, ajustes, propinas, etc.), sin tocar tu presupuesto base.</p>
+                ${(cat.contributions && cat.contributions.length)
+                  ? cat.contributions.slice().reverse().map(c => `
+                    <div class="movement contribution-row">
+                      <span class="desc">${escapeHtml(c.desc) || 'Aporte'}</span>
+                      <span class="amt ${c.currency.toLowerCase()}">+${fmt(Number(c.amount), c.currency)}</span>
+                      <button class="btn-tiny" data-action="delete-contribution" data-cat="${cat.id}" data-contrib="${c.id}">×</button>
+                    </div>
+                  `).join('')
+                  : '<p class="empty-msg" style="padding:6px 0;">Sin aportes registrados aún.</p>'}
+                <div class="quick-add">
+                  <input type="text" placeholder="Descripción del aporte" data-role="contrib-desc" data-cat="${cat.id}">
+                  <input type="number" placeholder="Monto" min="0" step="0.01" data-role="contrib-amount" data-cat="${cat.id}">
+                  <select data-role="contrib-currency" data-cat="${cat.id}">
+                    <option value="COP">COP</option>
+                    <option value="USD">USD</option>
+                  </select>
+                  <button class="btn-primary" data-action="add-contribution" data-cat="${cat.id}">Agregar aporte</button>
+                </div>
+              </div>
             </div>
             <div class="quick-add">
               <input type="text" placeholder="Descripción del gasto" data-role="mov-desc" data-cat="${cat.id}">
@@ -2027,8 +2181,22 @@
       // check if click was on .head but not on a button (toggle open)
       const head = e.target.closest('[data-action="toggle-open"]');
       if (head) {
+        const catId = head.getAttribute('data-id');
+        uiState.openCategories[catId] = !uiState.openCategories[catId];
         const row = head.closest('.category-row');
-        row.classList.toggle('open');
+        if (row) row.classList.toggle('open', uiState.openCategories[catId]);
+        return;
+      }
+      // check if click landed on a child of a section header (h2 text, arrow span)
+      const sectionHead = e.target.closest('[data-action="toggle-section"]');
+      if (sectionHead && !e.target.closest('button')) {
+        const sectionId = sectionHead.getAttribute('data-section');
+        uiState.sections[sectionId] = !uiState.sections[sectionId];
+        const body = document.getElementById('section-' + sectionId);
+        if (body) {
+          body.classList.toggle('open', uiState.sections[sectionId]);
+          sectionHead.classList.toggle('open', uiState.sections[sectionId]);
+        }
       }
       return;
     }
@@ -2075,6 +2243,7 @@
         }
         if (budgetRow) budgetRow.style.display = 'flex';
         // make sure the category is expanded so the budget row is visible
+        uiState.openCategories[catId] = true;
         const row = document.querySelector(`.category-row[data-id="${catId}"]`);
         if (row) row.classList.add('open');
         break;
@@ -2090,9 +2259,8 @@
         if (newName) cat.name = newName;
         cat.budgetCOP = Number(copInput.value) || 0;
         cat.budgetUSD = Number(usdInput.value) || 0;
+        uiState.openCategories[catId] = true;
         renderAll();
-        const row = document.querySelector(`.category-row[data-id="${catId}"]`);
-        if (row) row.classList.add('open');
         break;
       }
       case 'delete-movement': {
@@ -2101,10 +2269,88 @@
         const cat = state.categories.find(c => c.id === catId);
         if (cat) {
           cat.movements = cat.movements.filter(m => m.id !== movId);
+          uiState.openCategories[catId] = true;
           renderAll();
-          // re-open the category after re-render
-          const row = document.querySelector(`.category-row[data-id="${catId}"]`);
-          if (row) row.classList.add('open');
+        }
+        break;
+      }
+      case 'move-category-up': {
+        e.stopPropagation();
+        const catId = e.target.getAttribute('data-cat');
+        const idx = state.categories.findIndex(c => c.id === catId);
+        if (idx > 0) {
+          const [moved] = state.categories.splice(idx, 1);
+          state.categories.splice(idx - 1, 0, moved);
+          uiState.openCategories[catId] = true;
+          renderAll();
+        }
+        break;
+      }
+      case 'move-category-down': {
+        e.stopPropagation();
+        const catId = e.target.getAttribute('data-cat');
+        const idx = state.categories.findIndex(c => c.id === catId);
+        if (idx !== -1 && idx < state.categories.length - 1) {
+          const [moved] = state.categories.splice(idx, 1);
+          state.categories.splice(idx + 1, 0, moved);
+          uiState.openCategories[catId] = true;
+          renderAll();
+        }
+        break;
+      }
+      case 'toggle-section': {
+        const header = e.target.closest('[data-action="toggle-section"]');
+        const sectionId = header.getAttribute('data-section');
+        uiState.sections[sectionId] = !uiState.sections[sectionId];
+        const body = document.getElementById('section-' + sectionId);
+        if (body) {
+          body.classList.toggle('open', uiState.sections[sectionId]);
+          header.classList.toggle('open', uiState.sections[sectionId]);
+        }
+        break;
+      }
+      case 'toggle-contributions': {
+        e.stopPropagation();
+        const catId = e.target.closest('[data-action="toggle-contributions"]').getAttribute('data-cat');
+        const header = e.target.closest('[data-action="toggle-contributions"]');
+        uiState.openContributions[catId] = !uiState.openContributions[catId];
+        const body = document.querySelector(`[data-role="contributions-body"][data-cat="${catId}"]`);
+        if (body) {
+          body.style.display = uiState.openContributions[catId] ? 'block' : 'none';
+          if (header) header.classList.toggle('open', uiState.openContributions[catId]);
+        }
+        break;
+      }
+      case 'add-contribution': {
+        const catId = e.target.getAttribute('data-cat');
+        const cat = state.categories.find(c => c.id === catId);
+        if (!cat) break;
+        const descInput = document.querySelector(`[data-role="contrib-desc"][data-cat="${catId}"]`);
+        const amountInput = document.querySelector(`[data-role="contrib-amount"][data-cat="${catId}"]`);
+        const currencySelect = document.querySelector(`[data-role="contrib-currency"][data-cat="${catId}"]`);
+        const desc = descInput.value.trim();
+        const amount = Number(amountInput.value);
+        const currency = currencySelect.value;
+        if (!amount || amount <= 0) {
+          alert('Ingresa un monto válido para el aporte.');
+          break;
+        }
+        if (!cat.contributions) cat.contributions = [];
+        cat.contributions.push({ id: uid(), desc: desc || 'Aporte', amount, currency });
+        uiState.openCategories[catId] = true;
+        uiState.openContributions[catId] = true;
+        renderAll();
+        break;
+      }
+      case 'delete-contribution': {
+        const catId = e.target.getAttribute('data-cat');
+        const contribId = e.target.getAttribute('data-contrib');
+        const cat = state.categories.find(c => c.id === catId);
+        if (cat && cat.contributions) {
+          cat.contributions = cat.contributions.filter(c => c.id !== contribId);
+          uiState.openCategories[catId] = true;
+          uiState.openContributions[catId] = true;
+          renderAll();
         }
         break;
       }
@@ -2140,9 +2386,8 @@
         mov.budgetCurrency = targetCurrency;
         mov.budgetAmount = converted;
         mov.conversionRate = rate;
+        uiState.openCategories[catId] = true;
         renderAll();
-        const row = document.querySelector(`.category-row[data-id="${catId}"]`);
-        if (row) row.classList.add('open');
         break;
       }
       case 'add-movement': {
@@ -2192,10 +2437,9 @@
         if (changes.length) movement.changes = changes;
 
         cat.movements.push(movement);
+        uiState.openCategories[catId] = true;
         renderAll();
-        // re-open and clear inputs
-        const row = document.querySelector(`.category-row[data-id="${catId}"]`);
-        if (row) row.classList.add('open');
+        // clear inputs after re-render
         const newDesc = document.querySelector(`[data-role="mov-desc"][data-cat="${catId}"]`);
         const newAmount = document.querySelector(`[data-role="mov-amount"][data-cat="${catId}"]`);
         const newChangeAmount1 = document.querySelector(`[data-role="mov-change-amount-1"][data-cat="${catId}"]`);
@@ -2379,7 +2623,11 @@
           incomes: data.incomes || [],
           exchanges: data.exchanges || [],
           reconciliations: data.reconciliations || [],
-          categories: data.categories || []
+          categories: (data.categories || []).map(c => ({
+            ...c,
+            movements: c.movements || [],
+            contributions: c.contributions || []
+          }))
         };
         rateInput.value = state.rate || '';
         renderAll();
