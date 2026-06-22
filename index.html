@@ -541,6 +541,13 @@
   .recon-result .ok { color: var(--cop-color); }
   .recon-result .bad { color: var(--danger); }
 
+  .equiv-hint {
+    font-size: 0.72rem;
+    font-weight: 400;
+    opacity: 0.6;
+    margin-left: 2px;
+  }
+
   .contributions-block {
     margin-bottom: 12px;
     border: 1px solid var(--line);
@@ -1763,9 +1770,17 @@
       }
       const budgetLine = budgetLineParts.length ? budgetLineParts.join(' · ') : 'Sin presupuesto definido';
 
+      const rate = Number(state.rate) || 0;
+
       const remParts = [];
-      if (budgetCOP > 0) remParts.push(`<span class="cop ${remCOP < 0 ? 'neg' : ''}">${fmt(remCOP, 'COP')}</span>`);
-      if (budgetUSD > 0) remParts.push(`<span class="usd ${remUSD < 0 ? 'neg' : ''}">${fmt(remUSD, 'USD')}</span>`);
+      if (budgetCOP > 0) {
+        const equiv = rate > 0 ? ` <span class="equiv-hint">/ ${fmt(remCOP / rate, 'USD')}</span>` : '';
+        remParts.push(`<span class="cop ${remCOP < 0 ? 'neg' : ''}">${fmt(remCOP, 'COP')}${equiv}</span>`);
+      }
+      if (budgetUSD > 0) {
+        const equiv = rate > 0 ? ` <span class="equiv-hint">/ ${fmt(remUSD * rate, 'COP')}</span>` : '';
+        remParts.push(`<span class="usd ${remUSD < 0 ? 'neg' : ''}">${fmt(remUSD, 'USD')}${equiv}</span>`);
+      }
       if (remParts.length === 0) {
         // no budget — just show what's been spent
         if (spentCOP > 0) remParts.push(`<span class="cop">-${fmt(spentCOP, 'COP')}</span>`);
