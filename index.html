@@ -240,6 +240,39 @@
   .tag.cop { background: var(--cop-soft); color: var(--cop-color); }
   .tag.usd { background: var(--usd-soft); color: var(--usd-color); }
 
+  .income-row-editing,
+  .movement-editing {
+    display: grid;
+    grid-template-columns: 2fr 1fr auto auto auto;
+    gap: 6px;
+    align-items: center;
+    width: 100%;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+  }
+  .income-row-editing input,
+  .income-row-editing select,
+  .movement-editing input,
+  .movement-editing select {
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 5px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  @media (max-width: 600px) {
+    .income-row-editing,
+    .movement-editing {
+      grid-template-columns: 1fr 1fr;
+    }
+    .income-row-editing button,
+    .movement-editing button {
+      grid-column: span 1;
+    }
+  }
+
   /* Category cards */
   .category-row {
     cursor: pointer;
@@ -1126,7 +1159,10 @@
   const uiState = {
     sections: {},        // { reconcile: true, distribution: false, ... }
     openCategories: {},  // { [categoryId]: true }
-    openContributions: {} // { [categoryId]: true }
+    openContributions: {}, // { [categoryId]: true }
+    editingIncome: null,      // id of the income currently being edited, or null
+    editingMovement: null,    // id of the expense (movement) currently being edited, or null
+    editingContribution: null // id of the contribution currently being edited, or null
   };
 
   let state = {
@@ -1609,14 +1645,31 @@
       container.innerHTML = '<p class="empty-msg">Aún no has registrado ingresos. Agrega lo que ganas en pesos y/o en dólares.</p>';
       return;
     }
-    container.innerHTML = state.incomes.map(inc => `
+    container.innerHTML = state.incomes.map(inc => {
+      if (uiState.editingIncome === inc.id) {
+        return `
+          <div class="income-row income-row-editing">
+            <input type="text" value="${escapeHtml(inc.desc)}" data-role="edit-income-desc" data-id="${inc.id}" placeholder="Descripción">
+            <input type="number" value="${inc.amount}" min="0" step="0.01" data-role="edit-income-amount" data-id="${inc.id}">
+            <select data-role="edit-income-currency" data-id="${inc.id}">
+              <option value="COP" ${inc.currency === 'COP' ? 'selected' : ''}>COP</option>
+              <option value="USD" ${inc.currency === 'USD' ? 'selected' : ''}>USD</option>
+            </select>
+            <button class="btn-tiny" data-action="cancel-edit-income" data-id="${inc.id}">Cancelar</button>
+            <button class="btn-primary btn-tiny" data-action="save-edit-income" data-id="${inc.id}">Guardar</button>
+          </div>
+        `;
+      }
+      return `
       <div class="income-row">
         <span>${escapeHtml(inc.desc) || 'Ingreso'}</span>
         <span class="tag ${inc.currency.toLowerCase()}">${inc.currency}</span>
         <strong>${fmt(Number(inc.amount), inc.currency)}</strong>
+        <button class="icon-btn" data-action="edit-income" data-id="${inc.id}" title="Editar" aria-label="Editar">✎</button>
         <button class="btn-tiny" data-action="delete-income" data-id="${inc.id}">Eliminar</button>
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
 
   function renderCategoryList() {
@@ -1674,14 +1727,28 @@
 
             return `
             <div class="movement">
-              <span class="desc">
-                ${escapeHtml(m.desc) || 'Gasto'}
-                ${changesHtml}
-                ${conversionHtml}
-              </span>
-              <span class="amt ${m.currency.toLowerCase()}">${fmt(Number(m.amount), m.currency)}</span>
-              ${convertBtn}
-              <button class="btn-tiny" data-action="delete-movement" data-cat="${cat.id}" data-mov="${m.id}">×</button>
+              ${uiState.editingMovement === m.id ? `
+                <div class="movement-editing">
+                  <input type="text" value="${escapeHtml(m.desc)}" data-role="edit-mov-desc" data-cat="${cat.id}" data-mov="${m.id}" placeholder="Descripción">
+                  <input type="number" value="${m.amount}" min="0" step="0.01" data-role="edit-mov-amount" data-cat="${cat.id}" data-mov="${m.id}">
+                  <select data-role="edit-mov-currency" data-cat="${cat.id}" data-mov="${m.id}">
+                    <option value="COP" ${m.currency === 'COP' ? 'selected' : ''}>COP</option>
+                    <option value="USD" ${m.currency === 'USD' ? 'selected' : ''}>USD</option>
+                  </select>
+                  <button class="btn-tiny" data-action="cancel-edit-movement" data-cat="${cat.id}" data-mov="${m.id}">Cancelar</button>
+                  <button class="btn-primary btn-tiny" data-action="save-edit-movement" data-cat="${cat.id}" data-mov="${m.id}">Guardar</button>
+                </div>
+              ` : `
+                <span class="desc">
+                  ${escapeHtml(m.desc) || 'Gasto'}
+                  ${changesHtml}
+                  ${conversionHtml}
+                </span>
+                <span class="amt ${m.currency.toLowerCase()}">${fmt(Number(m.amount), m.currency)}</span>
+                ${convertBtn}
+                <button class="icon-btn" data-action="edit-movement" data-cat="${cat.id}" data-mov="${m.id}" title="Editar" aria-label="Editar">✎</button>
+                <button class="btn-tiny" data-action="delete-movement" data-cat="${cat.id}" data-mov="${m.id}">×</button>
+              `}
             </div>
           `;
           }).join('')
@@ -1798,9 +1865,23 @@
                 ${(cat.contributions && cat.contributions.length)
                   ? cat.contributions.slice().reverse().map(c => `
                     <div class="movement contribution-row">
-                      <span class="desc">${escapeHtml(c.desc) || 'Aporte'}</span>
-                      <span class="amt ${c.currency.toLowerCase()}">+${fmt(Number(c.amount), c.currency)}</span>
-                      <button class="btn-tiny" data-action="delete-contribution" data-cat="${cat.id}" data-contrib="${c.id}">×</button>
+                      ${uiState.editingContribution === c.id ? `
+                        <div class="movement-editing">
+                          <input type="text" value="${escapeHtml(c.desc)}" data-role="edit-contrib-desc" data-cat="${cat.id}" data-contrib="${c.id}" placeholder="Descripción">
+                          <input type="number" value="${c.amount}" min="0" step="0.01" data-role="edit-contrib-amount" data-cat="${cat.id}" data-contrib="${c.id}">
+                          <select data-role="edit-contrib-currency" data-cat="${cat.id}" data-contrib="${c.id}">
+                            <option value="COP" ${c.currency === 'COP' ? 'selected' : ''}>COP</option>
+                            <option value="USD" ${c.currency === 'USD' ? 'selected' : ''}>USD</option>
+                          </select>
+                          <button class="btn-tiny" data-action="cancel-edit-contribution" data-cat="${cat.id}" data-contrib="${c.id}">Cancelar</button>
+                          <button class="btn-primary btn-tiny" data-action="save-edit-contribution" data-cat="${cat.id}" data-contrib="${c.id}">Guardar</button>
+                        </div>
+                      ` : `
+                        <span class="desc">${escapeHtml(c.desc) || 'Aporte'}</span>
+                        <span class="amt ${c.currency.toLowerCase()}">+${fmt(Number(c.amount), c.currency)}</span>
+                        <button class="icon-btn" data-action="edit-contribution" data-cat="${cat.id}" data-contrib="${c.id}" title="Editar" aria-label="Editar">✎</button>
+                        <button class="btn-tiny" data-action="delete-contribution" data-cat="${cat.id}" data-contrib="${c.id}">×</button>
+                      `}
                     </div>
                   `).join('')
                   : '<p class="empty-msg" style="padding:6px 0;">Sin aportes registrados aún.</p>'}
@@ -2208,6 +2289,36 @@
         renderAll();
         break;
       }
+      case 'edit-income': {
+        const id = e.target.getAttribute('data-id');
+        uiState.editingIncome = id;
+        renderAll();
+        break;
+      }
+      case 'cancel-edit-income': {
+        uiState.editingIncome = null;
+        renderAll();
+        break;
+      }
+      case 'save-edit-income': {
+        const id = e.target.getAttribute('data-id');
+        const inc = state.incomes.find(i => i.id === id);
+        if (!inc) break;
+        const descInput = document.querySelector(`[data-role="edit-income-desc"][data-id="${id}"]`);
+        const amountInput = document.querySelector(`[data-role="edit-income-amount"][data-id="${id}"]`);
+        const currencySelect = document.querySelector(`[data-role="edit-income-currency"][data-id="${id}"]`);
+        const amount = Number(amountInput.value);
+        if (!amount || amount <= 0) {
+          alert('Ingresa un monto válido.');
+          break;
+        }
+        inc.desc = descInput.value.trim();
+        inc.amount = amount;
+        inc.currency = currencySelect.value;
+        uiState.editingIncome = null;
+        renderAll();
+        break;
+      }
       case 'delete-exchange': {
         const id = e.target.getAttribute('data-id');
         state.exchanges = state.exchanges.filter(ex => ex.id !== id);
@@ -2272,6 +2383,55 @@
           uiState.openCategories[catId] = true;
           renderAll();
         }
+        break;
+      }
+      case 'edit-movement': {
+        e.stopPropagation();
+        const catId = e.target.getAttribute('data-cat');
+        const movId = e.target.getAttribute('data-mov');
+        uiState.editingMovement = movId;
+        uiState.openCategories[catId] = true;
+        renderAll();
+        break;
+      }
+      case 'cancel-edit-movement': {
+        e.stopPropagation();
+        const catId = e.target.getAttribute('data-cat');
+        uiState.editingMovement = null;
+        uiState.openCategories[catId] = true;
+        renderAll();
+        break;
+      }
+      case 'save-edit-movement': {
+        e.stopPropagation();
+        const catId = e.target.getAttribute('data-cat');
+        const movId = e.target.getAttribute('data-mov');
+        const cat = state.categories.find(c => c.id === catId);
+        const mov = cat && cat.movements.find(m => m.id === movId);
+        if (!mov) break;
+        const descInput = document.querySelector(`[data-role="edit-mov-desc"][data-cat="${catId}"][data-mov="${movId}"]`);
+        const amountInput = document.querySelector(`[data-role="edit-mov-amount"][data-cat="${catId}"][data-mov="${movId}"]`);
+        const currencySelect = document.querySelector(`[data-role="edit-mov-currency"][data-cat="${catId}"][data-mov="${movId}"]`);
+        const amount = Number(amountInput.value);
+        if (!amount || amount <= 0) {
+          alert('Ingresa un monto válido.');
+          break;
+        }
+        const newCurrency = currencySelect.value;
+        mov.desc = descInput.value.trim();
+        mov.amount = amount;
+        // If the currency changed and this movement had a budget conversion
+        // attached, the old conversion no longer makes sense — clear it so
+        // the category can offer a fresh "convert" prompt if needed.
+        if (mov.currency !== newCurrency) {
+          delete mov.budgetCurrency;
+          delete mov.budgetAmount;
+          delete mov.conversionRate;
+        }
+        mov.currency = newCurrency;
+        uiState.editingMovement = null;
+        uiState.openCategories[catId] = true;
+        renderAll();
         break;
       }
       case 'move-category-up': {
@@ -2352,6 +2512,49 @@
           uiState.openContributions[catId] = true;
           renderAll();
         }
+        break;
+      }
+      case 'edit-contribution': {
+        e.stopPropagation();
+        const catId = e.target.getAttribute('data-cat');
+        const contribId = e.target.getAttribute('data-contrib');
+        uiState.editingContribution = contribId;
+        uiState.openCategories[catId] = true;
+        uiState.openContributions[catId] = true;
+        renderAll();
+        break;
+      }
+      case 'cancel-edit-contribution': {
+        e.stopPropagation();
+        const catId = e.target.getAttribute('data-cat');
+        uiState.editingContribution = null;
+        uiState.openCategories[catId] = true;
+        uiState.openContributions[catId] = true;
+        renderAll();
+        break;
+      }
+      case 'save-edit-contribution': {
+        e.stopPropagation();
+        const catId = e.target.getAttribute('data-cat');
+        const contribId = e.target.getAttribute('data-contrib');
+        const cat = state.categories.find(c => c.id === catId);
+        const contrib = cat && cat.contributions && cat.contributions.find(c => c.id === contribId);
+        if (!contrib) break;
+        const descInput = document.querySelector(`[data-role="edit-contrib-desc"][data-cat="${catId}"][data-contrib="${contribId}"]`);
+        const amountInput = document.querySelector(`[data-role="edit-contrib-amount"][data-cat="${catId}"][data-contrib="${contribId}"]`);
+        const currencySelect = document.querySelector(`[data-role="edit-contrib-currency"][data-cat="${catId}"][data-contrib="${contribId}"]`);
+        const amount = Number(amountInput.value);
+        if (!amount || amount <= 0) {
+          alert('Ingresa un monto válido.');
+          break;
+        }
+        contrib.desc = descInput.value.trim() || 'Aporte';
+        contrib.amount = amount;
+        contrib.currency = currencySelect.value;
+        uiState.editingContribution = null;
+        uiState.openCategories[catId] = true;
+        uiState.openContributions[catId] = true;
+        renderAll();
         break;
       }
       case 'convert-movement': {
