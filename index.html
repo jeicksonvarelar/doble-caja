@@ -547,6 +547,16 @@
     opacity: 0.6;
     margin-left: 2px;
   }
+  .total-equiv {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #6b675c;
+    background: var(--paper-2);
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-left: 4px;
+  }
+  .total-equiv.neg { color: var(--danger); }
 
   .contributions-block {
     margin-bottom: 12px;
@@ -1781,6 +1791,15 @@
         const equiv = rate > 0 ? ` <span class="equiv-hint">/ ${fmt(remUSD * rate, 'COP')}</span>` : '';
         remParts.push(`<span class="usd ${remUSD < 0 ? 'neg' : ''}">${fmt(remUSD, 'USD')}${equiv}</span>`);
       }
+
+      // Total unificado: solo cuando hay saldo en AMBAS monedas y hay tasa definida
+      if (budgetCOP > 0 && budgetUSD > 0 && rate > 0) {
+        const totalCOP = remCOP + (remUSD * rate);
+        const totalUSD = (remCOP / rate) + remUSD;
+        const isNeg = totalCOP < 0;
+        remParts.push(`<span class="total-equiv ${isNeg ? 'neg' : ''}">= ${fmt(totalCOP, 'COP')} / ${fmt(totalUSD, 'USD')}</span>`);
+      }
+
       if (remParts.length === 0) {
         // no budget — just show what's been spent
         if (spentCOP > 0) remParts.push(`<span class="cop">-${fmt(spentCOP, 'COP')}</span>`);
