@@ -1526,7 +1526,11 @@
   // Transfers IN add to the budget; transfers OUT subtract from it.
   function categoryTransferNet(cat, currency) {
     let net = 0;
-    (state.transfers || []).forEach(t => {
+    const transfers = state.transfers || [];
+    if (transfers.length && cat.name === '50$ de bono extra') {
+      console.log('[DobleCaja] transfers para', cat.name, currency, JSON.stringify(transfers));
+    }
+    transfers.forEach(t => {
       if (t.toCatId === cat.id && t.toCurrency === currency) net += Number(t.toAmount);
       if (t.fromCatId === cat.id && t.fromCurrency === currency) net -= Number(t.fromAmount);
     });
