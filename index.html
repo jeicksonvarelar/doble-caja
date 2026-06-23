@@ -1527,9 +1527,6 @@
   function categoryTransferNet(cat, currency) {
     let net = 0;
     const transfers = state.transfers || [];
-    if (transfers.length && cat.name === '50$ de bono extra') {
-      console.log('[DobleCaja] transfers para', cat.name, currency, JSON.stringify(transfers));
-    }
     transfers.forEach(t => {
       if (t.toCatId === cat.id && t.toCurrency === currency) net += Number(t.toAmount);
       if (t.fromCatId === cat.id && t.fromCurrency === currency) net -= Number(t.fromAmount);
@@ -1834,8 +1831,10 @@
       const baseBudgetUSD = Number(cat.budgetUSD) || 0;
       const contribCOP = categoryContributions(cat, 'COP');
       const contribUSD = categoryContributions(cat, 'USD');
-      const budgetCOP = baseBudgetCOP + contribCOP;
-      const budgetUSD = baseBudgetUSD + contribUSD;
+      const transferCOP = categoryTransferNet(cat, 'COP');
+      const transferUSD = categoryTransferNet(cat, 'USD');
+      const budgetCOP = baseBudgetCOP + contribCOP + transferCOP;
+      const budgetUSD = baseBudgetUSD + contribUSD + transferUSD;
       const remCOP = budgetCOP - spentCOP;
       const remUSD = budgetUSD - spentUSD;
 
@@ -1899,10 +1898,24 @@
 
       const budgetLineParts = [];
       if (budgetCOP > 0) {
-        budgetLineParts.push(`Presupuesto: ${fmt(budgetCOP, 'COP')}${contribCOP > 0 ? ` (${fmt(baseBudgetCOP, 'COP')} + ${fmt(contribCOP, 'COP')} aportes)` : ''}`);
+        let detail = '';
+        if (contribCOP > 0 || transferCOP !== 0) {
+          const parts = [`${fmt(baseBudgetCOP, 'COP')} base`];
+          if (contribCOP > 0) parts.push(`${fmt(contribCOP, 'COP')} aportes`);
+          if (transferCOP !== 0) parts.push(`${transferCOP > 0 ? '+' : ''}${fmt(transferCOP, 'COP')} traslados`);
+          detail = ` (${parts.join(' + ')})`;
+        }
+        budgetLineParts.push(`Presupuesto: ${fmt(budgetCOP, 'COP')}${detail}`);
       }
       if (budgetUSD > 0) {
-        budgetLineParts.push(`Presupuesto: ${fmt(budgetUSD, 'USD')}${contribUSD > 0 ? ` (${fmt(baseBudgetUSD, 'USD')} + ${fmt(contribUSD, 'USD')} aportes)` : ''}`);
+        let detail = '';
+        if (contribUSD > 0 || transferUSD !== 0) {
+          const parts = [`${fmt(baseBudgetUSD, 'USD')} base`];
+          if (contribUSD > 0) parts.push(`${fmt(contribUSD, 'USD')} aportes`);
+          if (transferUSD !== 0) parts.push(`${transferUSD > 0 ? '+' : ''}${fmt(transferUSD, 'USD')} traslados`);
+          detail = ` (${parts.join(' + ')})`;
+        }
+        budgetLineParts.push(`Presupuesto: ${fmt(budgetUSD, 'USD')}${detail}`);
       }
       const budgetLine = budgetLineParts.length ? budgetLineParts.join(' · ') : 'Sin presupuesto definido';
 
@@ -1938,7 +1951,7 @@
       if (budgetCOP > 0) {
         summaryStats.push(`
           <div class="stat">
-            <div class="stat-label">Presupuesto COP${contribCOP > 0 ? ` (${fmt(baseBudgetCOP, 'COP')} base + ${fmt(contribCOP, 'COP')} aportes)` : ''}</div>
+            <div class="stat-label">Presupuesto COP${(contribCOP > 0 || transferCOP !== 0) ? ` (${fmt(baseBudgetCOP, 'COP')} base${contribCOP > 0 ? ` + ${fmt(contribCOP, 'COP')} aportes` : ''}${transferCOP !== 0 ? ` + ${fmt(transferCOP, 'COP')} traslados` : ''})` : ''}</div>
             <div class="stat-value cop">${fmt(budgetCOP, 'COP')}</div>
           </div>
           <div class="stat">
@@ -1954,7 +1967,7 @@
       if (budgetUSD > 0) {
         summaryStats.push(`
           <div class="stat">
-            <div class="stat-label">Presupuesto USD${contribUSD > 0 ? ` (${fmt(baseBudgetUSD, 'USD')} base + ${fmt(contribUSD, 'USD')} aportes)` : ''}</div>
+            <div class="stat-label">Presupuesto USD${(contribUSD > 0 || transferUSD !== 0) ? ` (${fmt(baseBudgetUSD, 'USD')} base${contribUSD > 0 ? ` + ${fmt(contribUSD, 'USD')} aportes` : ''}${transferUSD !== 0 ? ` + ${fmt(transferUSD, 'USD')} traslados` : ''})` : ''}</div>
             <div class="stat-value usd">${fmt(budgetUSD, 'USD')}</div>
           </div>
           <div class="stat">
