@@ -558,6 +558,65 @@
   }
   .total-equiv.neg { color: var(--danger); }
 
+  .new-transfer-form {
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+  }
+  .transfer-form-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .transfer-form-row {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    align-items: center;
+    gap: 8px;
+  }
+  .transfer-form-row label {
+    font-size: 0.8rem;
+    color: #6b675c;
+    font-weight: 600;
+  }
+  .transfer-form-row select,
+  .transfer-form-row input[type=text],
+  .transfer-form-row input[type=number] {
+    font-family: inherit;
+    font-size: 0.88rem;
+    padding: 7px 10px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: #fff;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .transfer-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    margin-bottom: 6px;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.85rem;
+    flex-wrap: wrap;
+  }
+  .transfer-row .transfer-arrow {
+    color: #9b9788;
+    font-size: 1rem;
+  }
+  .transfer-row .transfer-from { color: var(--danger); font-weight: 600; }
+  .transfer-row .transfer-to { color: var(--cop-color); font-weight: 600; }
+  .transfer-row .transfer-desc { color: #6b675c; font-size: 0.78rem; flex: 1; }
+  .transfer-row .transfer-date { color: #9b9788; font-size: 0.75rem; }
+
+
   .contributions-block {
     margin-bottom: 12px;
     border: 1px solid var(--line);
@@ -1094,6 +1153,55 @@
   <div id="exchangeList"></div>
   </div>
 
+  <div class="section-head" data-action="toggle-section" data-section="transfers">
+    <h2><span class="section-arrow">▸</span>Traslados entre categorías</h2>
+    <div class="section-head-actions">
+      <button class="btn-secondary" id="toggleTransferForm">+ Nuevo traslado</button>
+    </div>
+  </div>
+  <div class="section-body" id="section-transfers">
+
+  <div class="new-transfer-form" id="transferForm" style="display:none;">
+    <p class="recon-hint">Mueve presupuesto de una categoría a otra sin afectar tu efectivo disponible.</p>
+    <div class="transfer-form-grid">
+      <div class="transfer-form-row">
+        <label>De categoría</label>
+        <select id="transferFromCat"></select>
+        <label>Moneda y monto</label>
+        <div style="display:flex; gap:6px;">
+          <select id="transferFromCurrency">
+            <option value="COP">COP</option>
+            <option value="USD">USD</option>
+          </select>
+          <input type="number" id="transferFromAmount" placeholder="Monto" min="0" step="0.01">
+        </div>
+      </div>
+      <div class="transfer-form-row">
+        <label>A categoría</label>
+        <select id="transferToCat"></select>
+        <label>Moneda destino</label>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <select id="transferToCurrency">
+            <option value="COP">COP</option>
+            <option value="USD">USD</option>
+          </select>
+          <span id="transferConversionNote" style="font-size:0.78rem; color:#6b675c;"></span>
+        </div>
+      </div>
+      <div class="transfer-form-row">
+        <label>Descripción (opcional)</label>
+        <input type="text" id="transferDesc" placeholder="Ej: Mover sobrante de Dr. Rocha a Mercado">
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px;">
+      <button class="btn-secondary" id="cancelTransfer">Cancelar</button>
+      <button class="btn-primary" id="saveTransfer">Guardar traslado</button>
+    </div>
+  </div>
+
+  <div id="transferList"></div>
+  </div>
+
   <div class="section-head" data-action="toggle-section" data-section="income">
     <h2><span class="section-arrow">▸</span>Ingresos</h2>
     <div class="section-head-actions">
@@ -1187,6 +1295,7 @@
     incomes: [], // {id, desc, amount, currency}
     exchanges: [], // {id, fromAmount, fromCurrency, rate, toAmount, toCurrency}
     reconciliations: [], // {id, date, countedCOP, countedUSD, expectedCOP, expectedUSD, diffCOP, diffUSD}
+    transfers: [], // {id, date, desc, fromCatId, fromAmount, fromCurrency, toCatId, toAmount, toCurrency, conversionRate?}
     categories: [
       { id: uid_static('fijo-alquiler'), name: 'Alquiler', budgetCOP: 0, budgetUSD: 0, movements: [], group: 'fijos' },
       { id: uid_static('fijo-internet'), name: 'Internet', budgetCOP: 0, budgetUSD: 0, movements: [], group: 'fijos' },
@@ -1211,6 +1320,7 @@
           incomes: loaded.incomes || [],
           exchanges: loaded.exchanges || [],
           reconciliations: loaded.reconciliations || [],
+          transfers: loaded.transfers || [],
           categories: (loaded.categories || []).map(c => ({
             ...c,
             movements: c.movements || [],
@@ -1295,6 +1405,7 @@
           incomes: toArray(remote.incomes),
           exchanges: toArray(remote.exchanges),
           reconciliations: toArray(remote.reconciliations),
+          transfers: toArray(remote.transfers),
           categories: toArray(remote.categories).map(c => ({
             ...c,
             movements: toArray(c.movements),
@@ -1411,6 +1522,17 @@
   // Effective budget for a category = the base monthly budget + any
   // contributions earmarked for it (e.g. change/surplus money the user
   // explicitly decided to assign to this category).
+  // Net budget effect of transfers on a category in a given currency.
+  // Transfers IN add to the budget; transfers OUT subtract from it.
+  function categoryTransferNet(cat, currency) {
+    let net = 0;
+    (state.transfers || []).forEach(t => {
+      if (t.toCatId === cat.id && t.toCurrency === currency) net += Number(t.toAmount);
+      if (t.fromCatId === cat.id && t.fromCurrency === currency) net -= Number(t.fromAmount);
+    });
+    return net;
+  }
+
   function categoryContributions(cat, currency) {
     return (cat.contributions || [])
       .filter(c => c.currency === currency)
@@ -1418,7 +1540,7 @@
   }
   function categoryBudget(cat, currency) {
     const base = Number(currency === 'COP' ? cat.budgetCOP : cat.budgetUSD) || 0;
-    return base + categoryContributions(cat, currency);
+    return base + categoryContributions(cat, currency) + categoryTransferNet(cat, currency);
   }
 
   function totalBudgeted(currency) {
@@ -1997,11 +2119,42 @@
     `).join('');
   }
 
+  function renderTransferList() {
+    const container = document.getElementById('transferList');
+    if (!container) return;
+    const transfers = state.transfers || [];
+    if (!transfers.length) {
+      container.innerHTML = '<p class="empty-msg">No hay traslados registrados aún.</p>';
+      return;
+    }
+    container.innerHTML = transfers.slice().reverse().map(t => {
+      const fromCat = state.categories.find(c => c.id === t.fromCatId);
+      const toCat = state.categories.find(c => c.id === t.toCatId);
+      const fromName = fromCat ? escapeHtml(fromCat.name) : 'Categoría eliminada';
+      const toName = toCat ? escapeHtml(toCat.name) : 'Categoría eliminada';
+      const date = new Date(t.date).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+      const convNote = t.fromCurrency !== t.toCurrency && t.conversionRate
+        ? ` <span class="change-note">(tasa ${t.conversionRate})</span>`
+        : '';
+      return `
+        <div class="transfer-row">
+          <span class="transfer-from">-${fmt(Number(t.fromAmount), t.fromCurrency)}</span>
+          <span class="transfer-arrow">→</span>
+          <span class="transfer-to">+${fmt(Number(t.toAmount), t.toCurrency)}</span>
+          <span class="transfer-desc">${fromName} → ${toName}${t.desc ? ` · ${escapeHtml(t.desc)}` : ''}${convNote}</span>
+          <span class="transfer-date">${date}</span>
+          <button class="btn-tiny" data-action="delete-transfer" data-id="${t.id}">×</button>
+        </div>
+      `;
+    }).join('');
+  }
+
   function renderAll() {
     renderBalances();
     renderReconcileHistory();
     renderDistribution();
     renderExchangeList();
+    renderTransferList();
     renderIncomeList();
     renderCategoryList();
     saveToMemory();
@@ -2093,6 +2246,109 @@
     exchRate.value = '';
     exchangeResult.textContent = '';
     exchangeForm.style.display = 'none';
+    renderAll();
+  });
+
+  // Transfer form
+  const transferForm = document.getElementById('transferForm');
+  const transferFromCatEl = document.getElementById('transferFromCat');
+  const transferToCatEl = document.getElementById('transferToCat');
+  const transferFromCurrencyEl = document.getElementById('transferFromCurrency');
+  const transferToCurrencyEl = document.getElementById('transferToCurrency');
+  const transferFromAmountEl = document.getElementById('transferFromAmount');
+  const transferDescEl = document.getElementById('transferDesc');
+  const transferConversionNote = document.getElementById('transferConversionNote');
+
+  function populateTransferSelects() {
+    const options = state.categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    transferFromCatEl.innerHTML = options;
+    transferToCatEl.innerHTML = options;
+    // Default to second category for "to" to avoid same→same
+    if (state.categories.length > 1) transferToCatEl.selectedIndex = 1;
+    updateTransferConversionNote();
+  }
+
+  function updateTransferConversionNote() {
+    const fromCurrency = transferFromCurrencyEl.value;
+    const toCurrency = transferToCurrencyEl.value;
+    const amount = Number(transferFromAmountEl.value) || 0;
+    const rate = Number(state.rate) || 0;
+    if (fromCurrency !== toCurrency && rate > 0 && amount > 0) {
+      let converted;
+      if (fromCurrency === 'COP' && toCurrency === 'USD') converted = fmt(amount / rate, 'USD');
+      else if (fromCurrency === 'USD' && toCurrency === 'COP') converted = fmt(amount * rate, 'COP');
+      transferConversionNote.textContent = converted ? `≈ ${converted} (tasa ${rate})` : '';
+    } else {
+      transferConversionNote.textContent = '';
+    }
+  }
+
+  document.getElementById('toggleTransferForm').addEventListener('click', () => {
+    const isOpen = transferForm.style.display !== 'none';
+    transferForm.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) populateTransferSelects();
+  });
+
+  document.getElementById('cancelTransfer').addEventListener('click', () => {
+    transferForm.style.display = 'none';
+    transferFromAmountEl.value = '';
+    transferDescEl.value = '';
+    transferConversionNote.textContent = '';
+  });
+
+  [transferFromCurrencyEl, transferToCurrencyEl, transferFromAmountEl].forEach(el => {
+    el.addEventListener('input', updateTransferConversionNote);
+    el.addEventListener('change', updateTransferConversionNote);
+  });
+
+  document.getElementById('saveTransfer').addEventListener('click', () => {
+    const fromCatId = transferFromCatEl.value;
+    const toCatId = transferToCatEl.value;
+    const fromCurrency = transferFromCurrencyEl.value;
+    const toCurrency = transferToCurrencyEl.value;
+    const fromAmount = Number(transferFromAmountEl.value);
+    const desc = transferDescEl.value.trim();
+    const rate = Number(state.rate) || 0;
+
+    if (!fromAmount || fromAmount <= 0) {
+      alert('Ingresa un monto válido.');
+      return;
+    }
+    if (fromCatId === toCatId) {
+      alert('La categoría de origen y destino no pueden ser la misma.');
+      return;
+    }
+    if (fromCurrency !== toCurrency && !rate) {
+      alert('Para trasladar entre monedas distintas necesitas definir la tasa de cambio (campo "1 USD = X COP" arriba).');
+      return;
+    }
+
+    let toAmount = fromAmount;
+    let conversionRate = null;
+    if (fromCurrency !== toCurrency) {
+      conversionRate = rate;
+      if (fromCurrency === 'COP' && toCurrency === 'USD') toAmount = fromAmount / rate;
+      else if (fromCurrency === 'USD' && toCurrency === 'COP') toAmount = fromAmount * rate;
+    }
+
+    if (!state.transfers) state.transfers = [];
+    state.transfers.push({
+      id: uid(),
+      date: new Date().toISOString(),
+      desc,
+      fromCatId,
+      fromAmount,
+      fromCurrency,
+      toCatId,
+      toAmount,
+      toCurrency,
+      ...(conversionRate ? { conversionRate } : {})
+    });
+
+    transferFromAmountEl.value = '';
+    transferDescEl.value = '';
+    transferConversionNote.textContent = '';
+    transferForm.style.display = 'none';
     renderAll();
   });
 
@@ -2356,6 +2612,12 @@
       case 'delete-exchange': {
         const id = e.target.getAttribute('data-id');
         state.exchanges = state.exchanges.filter(ex => ex.id !== id);
+        renderAll();
+        break;
+      }
+      case 'delete-transfer': {
+        const id = e.target.getAttribute('data-id');
+        state.transfers = (state.transfers || []).filter(t => t.id !== id);
         renderAll();
         break;
       }
@@ -2860,6 +3122,7 @@
           incomes: data.incomes || [],
           exchanges: data.exchanges || [],
           reconciliations: data.reconciliations || [],
+          transfers: data.transfers || [],
           categories: (data.categories || []).map(c => ({
             ...c,
             movements: c.movements || [],
