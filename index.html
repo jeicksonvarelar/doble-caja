@@ -616,6 +616,36 @@
   .transfer-row .transfer-desc { color: #6b675c; font-size: 0.78rem; flex: 1; }
   .transfer-row .transfer-date { color: #9b9788; font-size: 0.75rem; }
 
+  .transfer-row-editing {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto auto 1fr auto auto auto 2fr auto auto;
+    gap: 5px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .transfer-row-editing label {
+    font-size: 0.75rem;
+    color: #6b675c;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .transfer-row-editing select,
+  .transfer-row-editing input {
+    font-family: inherit;
+    font-size: 0.82rem;
+    padding: 5px 7px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    box-sizing: border-box;
+    min-width: 0;
+  }
+  @media (max-width: 600px) {
+    .transfer-row-editing {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
 
   .contributions-block {
     margin-bottom: 12px;
@@ -1287,7 +1317,8 @@
     openContributions: {}, // { [categoryId]: true }
     editingIncome: null,      // id of the income currently being edited, or null
     editingMovement: null,    // id of the expense (movement) currently being edited, or null
-    editingContribution: null // id of the contribution currently being edited, or null
+    editingContribution: null, // id of the contribution currently being edited, or null
+    editingTransfer: null      // id of the transfer currently being edited, or null
   };
 
   let state = {
@@ -2144,15 +2175,40 @@
       container.innerHTML = '<p class="empty-msg">No hay traslados registrados aún.</p>';
       return;
     }
+    const catOptions = state.categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
     container.innerHTML = transfers.slice().reverse().map(t => {
       const fromCat = state.categories.find(c => c.id === t.fromCatId);
       const toCat = state.categories.find(c => c.id === t.toCatId);
       const fromName = fromCat ? escapeHtml(fromCat.name) : 'Categoría eliminada';
       const toName = toCat ? escapeHtml(toCat.name) : 'Categoría eliminada';
       const date = new Date(t.date).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+
+      if (uiState.editingTransfer === t.id) {
+        return `
+          <div class="transfer-row transfer-row-editing">
+            <label>De:</label>
+            <select data-role="edit-transfer-fromcat" data-id="${t.id}">${state.categories.map(c => `<option value="${c.id}" ${c.id === t.fromCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select>
+            <select data-role="edit-transfer-fromcurrency" data-id="${t.id}">
+              <option value="COP" ${t.fromCurrency === 'COP' ? 'selected' : ''}>COP</option>
+              <option value="USD" ${t.fromCurrency === 'USD' ? 'selected' : ''}>USD</option>
+            </select>
+            <input type="number" value="${t.fromAmount}" min="0" step="0.01" data-role="edit-transfer-fromamount" data-id="${t.id}">
+            <label>A:</label>
+            <select data-role="edit-transfer-tocat" data-id="${t.id}">${state.categories.map(c => `<option value="${c.id}" ${c.id === t.toCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select>
+            <select data-role="edit-transfer-tocurrency" data-id="${t.id}">
+              <option value="COP" ${t.toCurrency === 'COP' ? 'selected' : ''}>COP</option>
+              <option value="USD" ${t.toCurrency === 'USD' ? 'selected' : ''}>USD</option>
+            </select>
+            <label>Desc:</label>
+            <input type="text" value="${escapeHtml(t.desc || '')}" data-role="edit-transfer-desc" data-id="${t.id}" placeholder="Descripción">
+            <button class="btn-tiny" data-action="cancel-edit-transfer" data-id="${t.id}">Cancelar</button>
+            <button class="btn-primary btn-tiny" data-action="save-edit-transfer" data-id="${t.id}">Guardar</button>
+          </div>
+        `;
+      }
+
       const convNote = t.fromCurrency !== t.toCurrency && t.conversionRate
-        ? ` <span class="change-note">(tasa ${t.conversionRate})</span>`
-        : '';
+        ? ` <span class="change-note">(tasa ${t.conversionRate})</span>` : '';
       return `
         <div class="transfer-row">
           <span class="transfer-from">-${fmt(Number(t.fromAmount), t.fromCurrency)}</span>
@@ -2160,6 +2216,7 @@
           <span class="transfer-to">+${fmt(Number(t.toAmount), t.toCurrency)}</span>
           <span class="transfer-desc">${fromName} → ${toName}${t.desc ? ` · ${escapeHtml(t.desc)}` : ''}${convNote}</span>
           <span class="transfer-date">${date}</span>
+          <button class="icon-btn" data-action="edit-transfer" data-id="${t.id}" title="Editar">✎</button>
           <button class="btn-tiny" data-action="delete-transfer" data-id="${t.id}">×</button>
         </div>
       `;
@@ -2635,6 +2692,57 @@
       case 'delete-transfer': {
         const id = e.target.getAttribute('data-id');
         state.transfers = (state.transfers || []).filter(t => t.id !== id);
+        renderAll();
+        break;
+      }
+      case 'edit-transfer': {
+        const id = e.target.getAttribute('data-id');
+        uiState.editingTransfer = id;
+        renderAll();
+        break;
+      }
+      case 'cancel-edit-transfer': {
+        uiState.editingTransfer = null;
+        renderAll();
+        break;
+      }
+      case 'save-edit-transfer': {
+        const id = e.target.getAttribute('data-id');
+        const transfer = (state.transfers || []).find(t => t.id === id);
+        if (!transfer) break;
+        const fromCatId = document.querySelector(`[data-role="edit-transfer-fromcat"][data-id="${id}"]`).value;
+        const toCatId = document.querySelector(`[data-role="edit-transfer-tocat"][data-id="${id}"]`).value;
+        const fromCurrency = document.querySelector(`[data-role="edit-transfer-fromcurrency"][data-id="${id}"]`).value;
+        const toCurrency = document.querySelector(`[data-role="edit-transfer-tocurrency"][data-id="${id}"]`).value;
+        const fromAmount = Number(document.querySelector(`[data-role="edit-transfer-fromamount"][data-id="${id}"]`).value);
+        const desc = document.querySelector(`[data-role="edit-transfer-desc"][data-id="${id}"]`).value.trim();
+        const rate = Number(state.rate) || 0;
+
+        if (!fromAmount || fromAmount <= 0) { alert('Ingresa un monto válido.'); break; }
+        if (fromCatId === toCatId) { alert('La categoría origen y destino no pueden ser la misma.'); break; }
+        if (fromCurrency !== toCurrency && !rate) {
+          alert('Para trasladar entre monedas distintas necesitas definir la tasa de cambio.');
+          break;
+        }
+
+        let toAmount = fromAmount;
+        let conversionRate = null;
+        if (fromCurrency !== toCurrency) {
+          conversionRate = rate;
+          toAmount = fromCurrency === 'COP' ? fromAmount / rate : fromAmount * rate;
+        }
+
+        transfer.fromCatId = fromCatId;
+        transfer.toCatId = toCatId;
+        transfer.fromCurrency = fromCurrency;
+        transfer.toCurrency = toCurrency;
+        transfer.fromAmount = fromAmount;
+        transfer.toAmount = toAmount;
+        transfer.desc = desc;
+        if (conversionRate) transfer.conversionRate = conversionRate;
+        else delete transfer.conversionRate;
+
+        uiState.editingTransfer = null;
         renderAll();
         break;
       }
