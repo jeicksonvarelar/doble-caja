@@ -614,7 +614,73 @@
   .transfer-row .transfer-from { color: var(--danger); font-weight: 600; }
   .transfer-row .transfer-to { color: var(--cop-color); font-weight: 600; }
   .transfer-row .transfer-desc { color: #6b675c; font-size: 0.78rem; flex: 1; }
-  .transfer-movement {
+  .ledger-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+  .ledger-block {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.83rem;
+  }
+  .ledger-currency-label {
+    background: var(--paper-2);
+    padding: 5px 12px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #6b675c;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--line);
+  }
+  .ledger-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--paper-2);
+  }
+  .ledger-row:last-child { border-bottom: none; }
+  .ledger-base { background: #fafaf8; }
+  .ledger-contrib { background: #f0f8f3; }
+  .ledger-transfer-in { background: #f0f8f3; }
+  .ledger-transfer-out { background: #fdf5f5; }
+  .ledger-expense { }
+  .ledger-total {
+    background: var(--paper-2);
+    font-weight: 700;
+    border-top: 1px solid var(--line) !important;
+  }
+  .ledger-desc {
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ledger-amount {
+    text-align: right;
+    min-width: 90px;
+    font-size: 0.8rem;
+    color: #6b675c;
+  }
+  .ledger-balance {
+    text-align: right;
+    min-width: 90px;
+    font-weight: 600;
+  }
+  .ledger-balance.cop { color: var(--cop-color); }
+  .ledger-balance.usd { color: var(--usd-color); }
+  .ledger-balance.neg { color: var(--danger); }
+  @media (max-width: 500px) {
+    .ledger-row { grid-template-columns: 1fr auto; }
+    .ledger-amount { display: none; }
+  }
+
     border-left: 3px solid #b3afa1;
     background: var(--paper-2);
     opacity: 0.9;
@@ -2025,40 +2091,99 @@
         if (remParts.length === 0) remParts.push('<span style="color:#9b9788;">Sin movimientos</span>');
       }
 
-      // Detailed summary stats (shown when category is expanded)
-      const summaryStats = [];
-      if (budgetCOP > 0) {
-        summaryStats.push(`
-          <div class="stat">
-            <div class="stat-label">Presupuesto COP${(contribCOP > 0 || transferCOP !== 0) ? ` (${fmt(baseBudgetCOP, 'COP')} base${contribCOP > 0 ? ` + ${fmt(contribCOP, 'COP')} aportes` : ''}${transferCOP !== 0 ? ` + ${fmt(transferCOP, 'COP')} traslados` : ''})` : ''}</div>
-            <div class="stat-value cop">${fmt(budgetCOP, 'COP')}</div>
-          </div>
-          <div class="stat">
-            <div class="stat-label">Gastado COP</div>
-            <div class="stat-value cop">${fmt(spentCOP, 'COP')}</div>
-          </div>
-          <div class="stat">
-            <div class="stat-label">Queda COP (${pctCOP.toFixed(0)}% usado)</div>
-            <div class="stat-value ${remCOP < 0 ? 'neg' : 'cop'}">${fmt(remCOP, 'COP')}</div>
-          </div>
-        `);
-      }
-      if (budgetUSD > 0) {
-        summaryStats.push(`
-          <div class="stat">
-            <div class="stat-label">Presupuesto USD${(contribUSD > 0 || transferUSD !== 0) ? ` (${fmt(baseBudgetUSD, 'USD')} base${contribUSD > 0 ? ` + ${fmt(contribUSD, 'USD')} aportes` : ''}${transferUSD !== 0 ? ` + ${fmt(transferUSD, 'USD')} traslados` : ''})` : ''}</div>
-            <div class="stat-value usd">${fmt(budgetUSD, 'USD')}</div>
-          </div>
-          <div class="stat">
-            <div class="stat-label">Gastado USD</div>
-            <div class="stat-value usd">${fmt(spentUSD, 'USD')}</div>
-          </div>
-          <div class="stat">
-            <div class="stat-label">Queda USD (${pctUSD.toFixed(0)}% usado)</div>
-            <div class="stat-value ${remUSD < 0 ? 'neg' : 'usd'}">${fmt(remUSD, 'USD')}</div>
+      // Estado de cuenta por moneda — reemplaza las cajitas de estadísticas
+      function buildLedger(currency) {
+        const fmtC = (n) => fmt(Math.abs(n), currency);
+        const sign = (n) => n >= 0 ? '+' : '-';
+        const cls = (n) => n >= 0 ? (currency === 'COP' ? 'cop' : 'usd') : 'neg';
+        const base = currency === 'COP' ? baseBudgetCOP : baseBudgetUSD;
+        if (base === 0 && categoryContributions(cat, currency) === 0 && categoryTransferNet(cat, currency) === 0) return '';
+
+        let saldo = base;
+        let rows = [];
+
+        // Línea inicial: presupuesto base
+        rows.push(`
+          <div class="ledger-row ledger-base">
+            <span class="ledger-desc">Presupuesto inicial</span>
+            <span class="ledger-amount ${currency === 'COP' ? 'cop' : 'usd'}">+${fmtC(base)}</span>
+            <span class="ledger-balance ${currency === 'COP' ? 'cop' : 'usd'}">${fmtC(saldo)}</span>
           </div>
         `);
+
+        // Aportes
+        (cat.contributions || []).filter(c => c.currency === currency).forEach(c => {
+          saldo += Number(c.amount);
+          rows.push(`
+            <div class="ledger-row ledger-contrib">
+              <span class="ledger-desc">↑ Aporte: ${escapeHtml(c.desc) || 'Aporte'}</span>
+              <span class="ledger-amount cop">+${fmtC(c.amount)}</span>
+              <span class="ledger-balance ${cls(saldo)}">${fmtC(saldo)}</span>
+            </div>
+          `);
+        });
+
+        // Traslados que afectan esta categoría en esta moneda
+        (state.transfers || []).forEach(t => {
+          if (t.toCatId === cat.id && t.toCurrency === currency) {
+            saldo += Number(t.toAmount);
+            const otherCat = state.categories.find(c => c.id === t.fromCatId);
+            rows.push(`
+              <div class="ledger-row ledger-transfer-in">
+                <span class="ledger-desc">↓ Traslado desde ${escapeHtml(otherCat?.name || '?')}${t.desc ? ': ' + escapeHtml(t.desc) : ''}</span>
+                <span class="ledger-amount cop">+${fmtC(t.toAmount)}</span>
+                <span class="ledger-balance ${cls(saldo)}">${fmtC(saldo)}</span>
+              </div>
+            `);
+          }
+          if (t.fromCatId === cat.id && t.fromCurrency === currency) {
+            saldo -= Number(t.fromAmount);
+            const otherCat = state.categories.find(c => c.id === t.toCatId);
+            rows.push(`
+              <div class="ledger-row ledger-transfer-out">
+                <span class="ledger-desc">↑ Traslado a ${escapeHtml(otherCat?.name || '?')}${t.desc ? ': ' + escapeHtml(t.desc) : ''}</span>
+                <span class="ledger-amount neg">-${fmtC(t.fromAmount)}</span>
+                <span class="ledger-balance ${cls(saldo)}">${fmtC(saldo)}</span>
+              </div>
+            `);
+          }
+        });
+
+        // Gastos
+        cat.movements.forEach(m => {
+          const impact = m.budgetCurrency ? { currency: m.budgetCurrency, amount: Number(m.budgetAmount) } : { currency: m.currency, amount: Number(m.amount) };
+          if (impact.currency !== currency) return;
+          saldo -= impact.amount;
+          const displayAmt = m.budgetCurrency && m.budgetCurrency !== m.currency
+            ? `${fmtC(impact.amount)} (pagado ${fmt(m.amount, m.currency)})`
+            : fmtC(impact.amount);
+          rows.push(`
+            <div class="ledger-row ledger-expense">
+              <span class="ledger-desc">− ${escapeHtml(m.desc) || 'Gasto'}</span>
+              <span class="ledger-amount neg">-${displayAmt}</span>
+              <span class="ledger-balance ${cls(saldo)}">${fmtC(saldo)}</span>
+            </div>
+          `);
+        });
+
+        // Línea de saldo final
+        rows.push(`
+          <div class="ledger-row ledger-total">
+            <span class="ledger-desc">Saldo disponible</span>
+            <span class="ledger-amount"></span>
+            <span class="ledger-balance ${cls(saldo)}">${saldo < 0 ? '-' : ''}${fmtC(saldo)}</span>
+          </div>
+        `);
+
+        return `
+          <div class="ledger-block">
+            <div class="ledger-currency-label">${currency}</div>
+            ${rows.join('')}
+          </div>
+        `;
       }
+
+      const summaryStats = [buildLedger('COP'), buildLedger('USD')].filter(Boolean);
 
       let alertLine = '';
       if (overCOP && overUSD) {
@@ -2094,7 +2219,6 @@
           ${alertLine}
 
           <div class="category-detail">
-            ${summaryStats.length ? `<div class="budget-summary">${summaryStats.join('')}</div>` : ''}
             <div class="budget-edit-row" data-role="budget-edit-row" data-cat="${cat.id}" style="display:none;">
               <span class="change-label">Presupuesto mensual:</span>
               <div class="currency-input cop">
@@ -2179,8 +2303,7 @@
               </select>
             </div>
             <div style="margin-top:10px;">
-              ${movementsHtml}
-              ${transfersHtml}
+              ${summaryStats.length ? `<div class="ledger-container">${summaryStats.join('')}</div>` : ''}
             </div>
             <div style="margin-top:10px; text-align:right;">
               <button class="btn-tiny" data-action="delete-category" data-cat="${cat.id}">Eliminar categoría</button>
