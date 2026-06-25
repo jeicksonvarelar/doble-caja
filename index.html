@@ -614,7 +614,31 @@
   .transfer-row .transfer-from { color: var(--danger); font-weight: 600; }
   .transfer-row .transfer-to { color: var(--cop-color); font-weight: 600; }
   .transfer-row .transfer-desc { color: #6b675c; font-size: 0.78rem; flex: 1; }
-  .transfer-row .transfer-date { color: #9b9788; font-size: 0.75rem; }
+  .transfer-movement {
+    border-left: 3px solid #b3afa1;
+    background: var(--paper-2);
+    opacity: 0.9;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .transfer-movement.transfer-out { border-left-color: var(--danger); }
+  .transfer-movement.transfer-in  { border-left-color: var(--cop-color); }
+  .transfer-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #9b9788;
+    white-space: nowrap;
+  }
+  .transfer-out .transfer-badge { color: var(--danger); }
+  .transfer-in  .transfer-badge { color: var(--cop-color); }
+  .transfer-date-inline {
+    font-size: 0.72rem;
+    color: #9b9788;
+    margin-left: auto;
+  }
+
 
   .transfer-row-editing {
     display: grid;
@@ -1927,6 +1951,30 @@
           }).join('')
         : '<p class="empty-msg" style="padding:8px 0;">Sin gastos registrados aún.</p>';
 
+      // Traslados que afectan esta categoría (entradas y salidas)
+      const catTransfers = (state.transfers || []).filter(t =>
+        t.fromCatId === cat.id || t.toCatId === cat.id
+      );
+      const transfersHtml = catTransfers.length ? catTransfers.map(t => {
+        const isOut = t.fromCatId === cat.id;
+        const otherCatId = isOut ? t.toCatId : t.fromCatId;
+        const otherCat = state.categories.find(c => c.id === otherCatId);
+        const otherName = otherCat ? escapeHtml(otherCat.name) : 'Categoría eliminada';
+        const amount = isOut ? t.fromAmount : t.toAmount;
+        const currency = isOut ? t.fromCurrency : t.toCurrency;
+        const sign = isOut ? '-' : '+';
+        const dirLabel = isOut ? `→ ${otherName}` : `← ${otherName}`;
+        const date = new Date(t.date).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+        return `
+          <div class="movement transfer-movement ${isOut ? 'transfer-out' : 'transfer-in'}">
+            <span class="transfer-badge">${isOut ? '↑ Traslado saliente' : '↓ Traslado entrante'}</span>
+            <span class="desc">${t.desc ? escapeHtml(t.desc) + ' · ' : ''}${dirLabel}</span>
+            <span class="amt ${currency.toLowerCase()}">${sign}${fmt(Number(amount), currency)}</span>
+            <span class="transfer-date-inline">${date}</span>
+          </div>
+        `;
+      }).join('') : '';
+
       const budgetLineParts = [];
       if (budgetCOP > 0) {
         let detail = '';
@@ -2132,6 +2180,7 @@
             </div>
             <div style="margin-top:10px;">
               ${movementsHtml}
+              ${transfersHtml}
             </div>
             <div style="margin-top:10px; text-align:right;">
               <button class="btn-tiny" data-action="delete-category" data-cat="${cat.id}">Eliminar categoría</button>
