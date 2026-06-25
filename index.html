@@ -2186,14 +2186,27 @@
       const summaryStats = [buildLedger('COP'), buildLedger('USD')].filter(Boolean);
 
       let alertLine = '';
-      if (overCOP && overUSD) {
-        alertLine = `<div class="alert-line">Presupuesto agotado en ambas monedas: te excediste por ${fmt(Math.abs(remCOP), 'COP')} y ${fmt(Math.abs(remUSD), 'USD')}.</div>`;
-      } else if (overCOP) {
-        alertLine = `<div class="alert-line">Presupuesto en pesos agotado: te excediste por ${fmt(Math.abs(remCOP), 'COP')}.</div>`;
-      } else if (overUSD) {
-        alertLine = `<div class="alert-line">Presupuesto en dólares agotado: te excediste por ${fmt(Math.abs(remUSD), 'USD')}.</div>`;
-      } else if ((budgetCOP > 0 && pctCOP >= 90) || (budgetUSD > 0 && pctUSD >= 90)) {
-        alertLine = `<div class="alert-line" style="color:var(--accent);">Te queda poco margen en este presupuesto.</div>`;
+      // Cuando hay presupuesto en ambas monedas y hay tasa definida,
+      // usamos el saldo total combinado para decidir si hay sobregiro real.
+      if (budgetCOP > 0 && budgetUSD > 0 && rate > 0) {
+        const totalRemCOP = remCOP + (remUSD * rate);
+        const totalRemUSD = (remCOP / rate) + remUSD;
+        if (totalRemCOP < 0) {
+          alertLine = `<div class="alert-line">Presupuesto agotado: te excediste por ${fmt(Math.abs(totalRemCOP), 'COP')} / ${fmt(Math.abs(totalRemUSD), 'USD')} en total (combinando ambas monedas).</div>`;
+        } else if (totalRemCOP / (budgetCOP + budgetUSD * rate) < 0.1) {
+          alertLine = `<div class="alert-line" style="color:var(--accent);">Te queda poco margen en este presupuesto.</div>`;
+        }
+      } else {
+        // Solo una moneda — lógica original
+        if (overCOP && overUSD) {
+          alertLine = `<div class="alert-line">Presupuesto agotado en ambas monedas: te excediste por ${fmt(Math.abs(remCOP), 'COP')} y ${fmt(Math.abs(remUSD), 'USD')}.</div>`;
+        } else if (overCOP) {
+          alertLine = `<div class="alert-line">Presupuesto en pesos agotado: te excediste por ${fmt(Math.abs(remCOP), 'COP')}.</div>`;
+        } else if (overUSD) {
+          alertLine = `<div class="alert-line">Presupuesto en dólares agotado: te excediste por ${fmt(Math.abs(remUSD), 'USD')}.</div>`;
+        } else if ((budgetCOP > 0 && pctCOP >= 90) || (budgetUSD > 0 && pctUSD >= 90)) {
+          alertLine = `<div class="alert-line" style="color:var(--accent);">Te queda poco margen en este presupuesto.</div>`;
+        }
       }
 
       return `
