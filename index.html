@@ -2069,23 +2069,162 @@
     countEl.textContent = archived.length;
 
     listEl.innerHTML = archived.map(cat => {
+      const isOpen = !!uiState.openCategories['arch-' + cat.id];
       const movCount = cat.movements.length;
-      const budgetCOP = Number(cat.budgetCOP) || 0;
-      const budgetUSD = Number(cat.budgetUSD) || 0;
+      const baseBudgetCOP = Number(cat.budgetCOP) || 0;
+      const baseBudgetUSD = Number(cat.budgetUSD) || 0;
+      const contribCOP = (cat.contributions||[]).filter(c=>c.currency==='COP').reduce((s,c)=>s+Number(c.amount),0);
+      const contribUSD = (cat.contributions||[]).filter(c=>c.currency==='USD').reduce((s,c)=>s+Number(c.amount),0);
+      const transferCOP = categoryTransferNet(cat, 'COP');
+      const transferUSD = categoryTransferNet(cat, 'USD');
+      const budgetCOP = baseBudgetCOP + contribCOP + transferCOP;
+      const budgetUSD = baseBudgetUSD + contribUSD + transferUSD;
+
       const budgetParts = [];
       if (budgetCOP > 0) budgetParts.push(fmt(budgetCOP, 'COP'));
       if (budgetUSD > 0) budgetParts.push(fmt(budgetUSD, 'USD'));
       const budgetStr = budgetParts.length ? budgetParts.join(' · ') : 'Sin presupuesto';
+
+      // Calcular totales gastados
+      const spentCOP = cat.movements.filter(m=>(m.budgetCurrency||m.currency)==='COP').reduce((s,m)=>s+(m.budgetCurrency?Number(m.budgetAmount):Number(m.amount)),0);
+      const spentUSD = cat.movements.filter(m=>(m.budgetCurrency||m.currency)==='USD').reduce((s,m)=>s+(m.budgetCurrency?Number(m.budgetAmount):Number(m.amount)),0);
+      const spentParts = [];
+      if (spentCOP > 0) spentParts.push(`Gastado: ${fmt(spentCOP,'COP')}`);
+      if (spentUSD > 0) spentParts.push(`Gastado: ${fmt(spentUSD,'USD')}`);
+
+      // Construir ledger de solo lectura por moneda
+      function buildArchiveLedger(currency) {
+        const base = currency === 'COP' ? baseBudgetCOP : baseBudgetUSD;
+        const catExchanges = (state.exchanges||[]).filter(ex => ex.catId === cat.id && (ex.fromCurrency===currency||ex.toCurrency===currency));
+        const hasEvents = base > 0 ||
+          (cat.contributions||[]).some(c=>c.currency===currency) ||
+          (state.transfers||[]).some(t=>(t.toCatId===cat.id&&t.toCurrency===currency)||(t.fromCatId===cat.id&&t.fromCurrency===currency)) ||
+          catExchanges.length > 0 ||
+          cat.movements.some(m=>(m.budgetCurrency||m.currency)===currency || getMovementChanges(m).some(ch=>ch.currency===currency));
+        if (!hasEvents) return '';
+
+        const fmtC = n => fmt(Math.abs(n), currency);
+        const balCls = n => n >= 0 ? (currency==='COP'?'cop':'usd') : 'neg';
+        const events = [];
+        (cat.contributions||[]).filter(c=>c.currency===currency).forEach(c => events.push({date:c.date||null,type:'contrib',data:c}));
+        (state.transfers||[]).forEach(t => {
+          if (t.toCatId===cat.id && t.toCurrency===currency) events.push({date:t.date||null,type:'transfer-in',data:t});
+          if (t.fromCatId===cat.id && t.fromCurrency===currency) events.push({date:t.date||null,type:'transfer-out',data:t});
+        });
+        catExchanges.forEach(ex => events.push({date:ex.date||null,type:'cat-exchange',data:ex}));
+        cat.movements.forEach((m,idx) => {
+          const ic = m.budgetCurrency||m.currency;
+          if (ic===currency) events.push({date:m.date||null,arrayIdx:idx,type:'expense',data:m});
+          getMovementChanges(m).forEach(ch => {
+            if (ch.currency===currency) events.push({date:m.date||null,arrayIdx:idx,type:'vuelto',data:m,change:ch});
+          });
+        });
+        events.sort((a,b) => {
+          if (!a.date&&!b.date) return (a.arrayIdx??0)-(b.arrayIdx??0);
+          if (!a.date) return -1; if (!b.date) return 1;
+          return a.date<b.date?-1:a.date>b.date?1:0;
+        });
+
+        let saldo = base;
+        const rows = [];
+        rows.push(`<div class="ledger-row ledger-base">
+          <span class="ledger-desc">Presupuesto inicial</span>
+          <span class="ledger-amount ${currency==='COP'?'cop':'usd'}">+${fmtC(base)}</span>
+          <span class="ledger-balance ${balCls(saldo)}">${fmtC(saldo)}</span>
+        </div>`);
+
+        events.forEach(ev => {
+          const dateStr = ev.date ? new Date(ev.date).toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit'}) : '';
+          if (ev.type==='contrib') {
+            const c = ev.data; saldo += Number(c.amount);
+            rows.push(`<div class="ledger-row ledger-contrib">
+              <span class="ledger-desc">↑ Aporte: ${escapeHtml(c.desc)||'Aporte'}${dateStr?` <span class="ledger-date">${dateStr}</span>`:''}</span>
+              <span class="ledger-amount ${currency==='COP'?'cop':'usd'}">+${fmtC(c.amount)}</span>
+              <span class="ledger-balance ${balCls(saldo)}">${fmtC(saldo)}</span>
+            </div>`);
+          } else if (ev.type==='transfer-in') {
+            const t = ev.data; saldo += Number(t.toAmount);
+            const other = state.categories.find(c=>c.id===t.fromCatId);
+            rows.push(`<div class="ledger-row ledger-transfer-in">
+              <span class="ledger-desc">↓ Traslado desde ${escapeHtml(other?.name||'?')}${t.desc?': '+escapeHtml(t.desc):''} <span class="ledger-date">${dateStr}</span></span>
+              <span class="ledger-amount ${currency==='COP'?'cop':'usd'}">+${fmtC(t.toAmount)}</span>
+              <span class="ledger-balance ${balCls(saldo)}">${fmtC(saldo)}</span>
+            </div>`);
+          } else if (ev.type==='transfer-out') {
+            const t = ev.data; saldo -= Number(t.fromAmount);
+            const other = state.categories.find(c=>c.id===t.toCatId);
+            rows.push(`<div class="ledger-row ledger-transfer-out">
+              <span class="ledger-desc">↑ Traslado a ${escapeHtml(other?.name||'?')}${t.desc?': '+escapeHtml(t.desc):''} <span class="ledger-date">${dateStr}</span></span>
+              <span class="ledger-amount neg">-${fmtC(t.fromAmount)}</span>
+              <span class="ledger-balance ${balCls(saldo)}">${fmtC(saldo)}</span>
+            </div>`);
+          } else if (ev.type==='cat-exchange') {
+            const ex = ev.data;
+            const isOut = ex.fromCurrency===currency;
+            const amt = isOut ? Number(ex.fromAmount) : Number(ex.toAmount);
+            if (isOut) saldo -= amt; else saldo += amt;
+            const otherCur = isOut ? ex.toCurrency : ex.fromCurrency;
+            const otherAmt = isOut ? Number(ex.toAmount) : Number(ex.fromAmount);
+            rows.push(`<div class="ledger-row ledger-exchange">
+              <span class="ledger-desc">⇄ Cambio ${isOut?'a':'desde'} ${otherCur}: ${fmt(otherAmt,otherCur)} (tasa ${ex.rate})${dateStr?` <span class="ledger-date">${dateStr}</span>`:''}</span>
+              <span class="ledger-amount ${isOut?'neg':(currency==='COP'?'cop':'usd')}">${isOut?'-':'+'}${fmtC(amt)}</span>
+              <span class="ledger-balance ${balCls(saldo)}">${saldo<0?'-':''}${fmtC(saldo)}</span>
+            </div>`);
+          } else if (ev.type==='expense') {
+            const m = ev.data;
+            const impactAmt = m.budgetCurrency ? Number(m.budgetAmount) : Number(m.amount);
+            saldo -= impactAmt;
+            const convHtml = (m.budgetCurrency && m.budgetCurrency!==m.currency)
+              ? `<span class="ledger-note">${fmt(Number(m.amount),m.currency)} pagados → ${fmt(impactAmt,currency)} del presupuesto (tasa ${m.conversionRate})</span>` : '';
+            rows.push(`<div class="ledger-row ledger-expense">
+              <span class="ledger-desc">− ${escapeHtml(m.desc)||'Gasto'}${dateStr?` <span class="ledger-date">${dateStr}</span>`:''} ${convHtml}</span>
+              <span class="ledger-amount neg">-${fmtC(impactAmt)}</span>
+              <span class="ledger-balance ${balCls(saldo)}">${saldo<0?'-':''}${fmtC(saldo)}</span>
+            </div>`);
+          } else if (ev.type==='vuelto') {
+            const ch = ev.change; saldo += Number(ch.amount);
+            const m = ev.data;
+            rows.push(`<div class="ledger-row ledger-contrib">
+              <span class="ledger-desc">↩ Vuelto de "${escapeHtml(m.desc)||'Gasto'}"${dateStr?` <span class="ledger-date">${dateStr}</span>`:''}
+                <span class="ledger-note">Recibiste vuelto en ${currency} al pagar en ${m.currency}</span>
+              </span>
+              <span class="ledger-amount ${currency==='COP'?'cop':'usd'}">+${fmtC(ch.amount)}</span>
+              <span class="ledger-balance ${balCls(saldo)}">${saldo<0?'-':''}${fmtC(saldo)}</span>
+            </div>`);
+          }
+        });
+
+        rows.push(`<div class="ledger-row ledger-total">
+          <span class="ledger-desc">Saldo final</span>
+          <span class="ledger-amount"></span>
+          <span class="ledger-balance ${balCls(saldo)}">${saldo<0?'-':''}${fmtC(saldo)}</span>
+        </div>`);
+
+        return `<div class="ledger-block"><div class="ledger-currency-label">${currency}</div>${rows.join('')}</div>`;
+      }
+
+      const ledgerCOP = buildArchiveLedger('COP');
+      const ledgerUSD = buildArchiveLedger('USD');
+      const ledgerHtml = [ledgerCOP, ledgerUSD].filter(Boolean).join('');
+
       return `
-        <div class="archived-category-row">
-          <div>
-            <div class="arch-name">${escapeHtml(cat.name)}</div>
-            <div class="arch-meta">${budgetStr} · ${movCount} movimiento${movCount === 1 ? '' : 's'}</div>
+        <div class="archived-category-row" style="flex-direction:column; align-items:stretch; padding:0; overflow:hidden;">
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; gap:10px; flex-wrap:wrap; cursor:pointer;"
+               data-action="toggle-archived" data-cat="${cat.id}">
+            <div>
+              <div class="arch-name">${escapeHtml(cat.name)} <span style="font-size:0.7rem; color:#9b9788; font-weight:400;">${isOpen ? '▾' : '▸'}</span></div>
+              <div class="arch-meta">${budgetStr} · ${movCount} movimiento${movCount===1?'':'s'}${spentParts.length?' · '+spentParts.join(' · '):''}</div>
+            </div>
+            <div class="arch-actions" onclick="event.stopPropagation()">
+              <button class="btn-secondary" data-action="unarchive-category" data-cat="${cat.id}">Desarchivar</button>
+              <button class="btn-tiny" data-action="delete-category" data-cat="${cat.id}">Eliminar</button>
+            </div>
           </div>
-          <div class="arch-actions">
-            <button class="btn-secondary" data-action="unarchive-category" data-cat="${cat.id}">Desarchivar</button>
-            <button class="btn-tiny" data-action="delete-category" data-cat="${cat.id}">Eliminar</button>
-          </div>
+          ${isOpen && ledgerHtml ? `
+            <div style="padding:0 14px 14px;">
+              <div class="ledger-container">${ledgerHtml}</div>
+            </div>
+          ` : ''}
         </div>
       `;
     }).join('');
@@ -3204,6 +3343,15 @@
           uiState.archiveSectionOpen = true; // open archive so user sees where it went
           renderAll();
         }
+        break;
+      }
+      case 'toggle-archived': {
+        e.stopPropagation();
+        const togEl = e.target.closest('[data-action="toggle-archived"]');
+        if (!togEl) break;
+        const catId = togEl.getAttribute('data-cat');
+        uiState.openCategories['arch-' + catId] = !uiState.openCategories['arch-' + catId];
+        renderArchivedCategories();
         break;
       }
       case 'unarchive-category': {
