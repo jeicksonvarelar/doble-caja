@@ -2431,10 +2431,10 @@
             <span class="ledger-balance ${balCls(saldo)}">${saldo < 0 ? '-' : ''}${fmtC(saldo)}</span>
           </div>`);
 
-        // Botón de cambio de moneda al pie (solo si hay saldo positivo y la otra moneda existe en esta categoría)
+        // Botón de cambio de moneda al pie — aparece siempre que haya saldo positivo
+        // (sirve para convertir parte del presupuesto disponible a la otra moneda)
         const otherCurrency = currency === 'COP' ? 'USD' : 'COP';
-        const otherBudget = otherCurrency === 'COP' ? budgetCOP : budgetUSD;
-        const exchangeBtn = (otherBudget > 0 && saldo > 0)
+        const exchangeBtn = saldo > 0
           ? `<div class="ledger-exchange-btn-row">
                <button class="btn-secondary" style="font-size:0.78rem;" data-action="cat-exchange" data-cat="${cat.id}" data-from="${currency}" data-to="${otherCurrency}">
                  ⇄ Cambiar ${currency} → ${otherCurrency}
@@ -3106,27 +3106,30 @@
         const catId = e.target.getAttribute('data-cat');
         const fromCur = e.target.getAttribute('data-from');
         const toCur = e.target.getAttribute('data-to');
+
+        const amtVal = prompt(`¿Cuántos ${fromCur} vas a cambiar?`, '');
+        if (amtVal === null) break;
+        const fromAmount = Number(amtVal);
+        if (!fromAmount || fromAmount <= 0) { alert('Monto inválido.'); break; }
+
         const defaultRate = state.rate ? String(state.rate) : '';
         const rateVal = prompt(
-          `¿A qué tasa cambias de ${fromCur} a ${toCur}? (1 USD = X COP)`,
+          `¿A qué tasa te cambiaron? (1 USD = X COP)`,
           defaultRate
         );
         if (rateVal === null) break;
         const rate = Number(rateVal);
         if (!rate || rate <= 0) { alert('Tasa inválida.'); break; }
 
-        const amtVal = prompt(
-          `¿Cuántos ${fromCur} vas a cambiar?`,
-          ''
-        );
-        if (amtVal === null) break;
-        const fromAmount = Number(amtVal);
-        if (!fromAmount || fromAmount <= 0) { alert('Monto inválido.'); break; }
-
         const toAmount = fromCur === 'USD' ? fromAmount * rate : fromAmount / rate;
 
-        // Registrar como cambio de moneda global (afecta balances generales)
-        // y marcarlo con catId para que aparezca en el ledger de la categoría
+        if (!confirm(
+          `Confirmar cambio:\n` +
+          `  ${fromCur === 'USD' ? 'US$' : '$'}${fromAmount} ${fromCur} → ` +
+          `${toCur === 'COP' ? '$' + Math.round(toAmount).toLocaleString('es-CO') : 'US$' + toAmount.toFixed(2)} ${toCur}\n` +
+          `  Tasa: 1 USD = $${rate.toLocaleString('es-CO')} COP`
+        )) break;
+
         if (!state.exchanges) state.exchanges = [];
         state.exchanges.push({
           id: uid(),
@@ -3136,7 +3139,7 @@
           toAmount,
           toCurrency: toCur,
           rate,
-          catId  // referencia a la categoría donde se originó
+          catId
         });
 
         uiState.openCategories[catId] = true;
