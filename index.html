@@ -1082,6 +1082,69 @@
   .currency-badge.cop { background: var(--cop-soft); color: var(--cop-color); }
   .currency-badge.usd { background: var(--usd-soft); color: var(--usd-color); }
 
+  .archive-section {
+    margin-top: 28px;
+  }
+  .archive-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    padding: 8px 12px;
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #7a766a;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .archive-section-head .section-arrow {
+    font-size: 0.8rem;
+    transition: transform 0.18s ease;
+    display: inline-block;
+    color: #9b9788;
+  }
+  .archive-section-head.open .section-arrow {
+    transform: rotate(90deg);
+  }
+  .archive-body {
+    display: none;
+    margin-top: 8px;
+  }
+  .archive-body.open {
+    display: block;
+  }
+  .archived-category-row {
+    background: var(--paper-2);
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+    font-size: 0.88rem;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .archived-category-row .arch-name {
+    font-weight: 700;
+    color: #7a766a;
+  }
+  .archived-category-row .arch-meta {
+    font-size: 0.75rem;
+    color: #9b9788;
+  }
+  .archived-category-row .arch-actions {
+    display: flex;
+    gap: 6px;
+  }
+
   @media (max-width: 480px) {
     .balances { grid-template-columns: 1fr; }
     .form-row { grid-template-columns: 1fr; }
@@ -1385,6 +1448,15 @@
   </div>
 
   <div id="categoryList"></div>
+
+  <div class="archive-section" id="archiveSection" style="display:none;">
+    <div class="archive-section-head" id="archiveSectionHead">
+      <span><span class="section-arrow">▸</span> Categorías archivadas (<span id="archiveCount">0</span>)</span>
+    </div>
+    <div class="archive-body" id="archiveBody">
+      <div id="archivedCategoryList"></div>
+    </div>
+  </div>
   </div>
 
 
@@ -1410,10 +1482,11 @@
     sections: {},        // { reconcile: true, distribution: false, ... }
     openCategories: {},  // { [categoryId]: true }
     openContributions: {}, // { [categoryId]: true }
-    editingIncome: null,      // id of the income currently being edited, or null
-    editingMovement: null,    // id of the expense (movement) currently being edited, or null
-    editingContribution: null, // id of the contribution currently being edited, or null
-    editingTransfer: null      // id of the transfer currently being edited, or null
+    archiveSectionOpen: false,
+    editingIncome: null,
+    editingMovement: null,
+    editingContribution: null,
+    editingTransfer: null
   };
 
   let state = {
@@ -1619,6 +1692,10 @@
   }
 
   // ---- Computations ----
+  function activeCategories() {
+    return state.categories.filter(c => !c.archived);
+  }
+
   function totalIncome(currency) {
     return state.incomes
       .filter(i => i.currency === currency)
@@ -1671,11 +1748,11 @@
   }
 
   function totalBudgeted(currency) {
-    return state.categories.reduce((s, c) => s + categoryBudget(c, currency), 0);
+    return activeCategories().reduce((s, c) => s + categoryBudget(c, currency), 0);
   }
 
   function budgetSpentTotal(currency) {
-    return state.categories.reduce((s, c) => s + categorySpent(c, currency), 0);
+    return activeCategories().reduce((s, c) => s + categorySpent(c, currency), 0);
   }
 
   // "Real spent": actual cash that left your pocket in each currency,
@@ -1687,7 +1764,7 @@
   }
 
   function totalSpent(currency) {
-    return state.categories.reduce((s, c) => s + realCategorySpent(c, currency), 0);
+    return activeCategories().reduce((s, c) => s + realCategorySpent(c, currency), 0);
   }
 
   // Net effect of currency exchanges on each currency's general pool
@@ -1710,7 +1787,7 @@
 
   function totalChangeReceived(currency) {
     let total = 0;
-    state.categories.forEach(cat => {
+    activeCategories().forEach(cat => {
       cat.movements.forEach(m => {
         getMovementChanges(m).forEach(ch => {
           if (ch && ch.currency === currency && Number(ch.amount) > 0) {
@@ -1837,12 +1914,12 @@
       ${summaryCard('USD', incomeUSD, budgetedUSD, extraUSD, leftoverUSD)}
     </div>`;
 
-    if (state.categories.length === 0) {
+    if (activeCategories().length === 0) {
       tableContainer.innerHTML = '';
       return;
     }
 
-    const rows = state.categories.map(cat => {
+    const rows = activeCategories().map(cat => {
       const spentCOP = categorySpent(cat, 'COP');
       const spentUSD = categorySpent(cat, 'USD');
       const budgetCOP = categoryBudget(cat, 'COP');
@@ -1940,12 +2017,56 @@
 
   function renderCategoryList() {
     const container = document.getElementById('categoryList');
-    if (state.categories.length === 0) {
-      container.innerHTML = '<p class="empty-msg">No tienes categorías todavía. Crea una como "Mercado" o "Transporte" y empieza a registrar tus gastos.</p>';
+    const active = activeCategories();
+    if (active.length === 0) {
+      container.innerHTML = '<p class="empty-msg">No tienes categorías activas. Crea una como "Mercado" o "Transporte" y empieza a registrar tus gastos.</p>';
+    } else {
+      container.innerHTML = active.map((cat, idx) => renderCategory(cat, idx, active.length)).join('');
+    }
+    renderArchivedCategories();
+  }
+
+  function renderArchivedCategories() {
+    const archived = state.categories.filter(c => c.archived);
+    const section = document.getElementById('archiveSection');
+    const countEl = document.getElementById('archiveCount');
+    const listEl = document.getElementById('archivedCategoryList');
+    const head = document.getElementById('archiveSectionHead');
+
+    if (!archived.length) {
+      section.style.display = 'none';
       return;
     }
 
-    container.innerHTML = state.categories.map((cat, idx) => renderCategory(cat, idx, state.categories.length)).join('');
+    section.style.display = 'block';
+    countEl.textContent = archived.length;
+
+    listEl.innerHTML = archived.map(cat => {
+      const movCount = cat.movements.length;
+      const budgetCOP = Number(cat.budgetCOP) || 0;
+      const budgetUSD = Number(cat.budgetUSD) || 0;
+      const budgetParts = [];
+      if (budgetCOP > 0) budgetParts.push(fmt(budgetCOP, 'COP'));
+      if (budgetUSD > 0) budgetParts.push(fmt(budgetUSD, 'USD'));
+      const budgetStr = budgetParts.length ? budgetParts.join(' · ') : 'Sin presupuesto';
+      return `
+        <div class="archived-category-row">
+          <div>
+            <div class="arch-name">${escapeHtml(cat.name)}</div>
+            <div class="arch-meta">${budgetStr} · ${movCount} movimiento${movCount === 1 ? '' : 's'}</div>
+          </div>
+          <div class="arch-actions">
+            <button class="btn-secondary" data-action="unarchive-category" data-cat="${cat.id}">Desarchivar</button>
+            <button class="btn-tiny" data-action="delete-category" data-cat="${cat.id}">Eliminar</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // keep toggle state
+    const isOpen = uiState.archiveSectionOpen;
+    head.classList.toggle('open', !!isOpen);
+    document.getElementById('archiveBody').classList.toggle('open', !!isOpen);
   }
 
   function renderCategory(cat, idx, total) {
@@ -2282,6 +2403,10 @@
               </div>
               <button class="btn-secondary" data-action="save-budget" data-cat="${cat.id}">Guardar</button>
             </div>
+            <div class="movements-list">
+              ${movementsHtml}
+              ${transfersHtml}
+            </div>
             <div class="contributions-block">
               <div class="contributions-header ${isContribOpen ? 'open' : ''}" data-action="toggle-contributions" data-cat="${cat.id}">
                 <span>+ Aportes al presupuesto${(cat.contributions || []).length ? ` (${cat.contributions.length})` : ''}</span>
@@ -2332,7 +2457,7 @@
               </select>
               <button class="btn-primary" data-action="add-movement" data-cat="${cat.id}">Agregar</button>
             </div>
-            <div class="conversion-row" data-role="conversion-row" data-cat="${cat.id}" style="display:none;">
+            <div class="conversion-row" data-role="conversion-row" data-cat="${cat.id}" data-budget-currency="${(budgetUSD > 0 && budgetCOP === 0) ? 'USD' : 'COP'}" style="display:none;">
               <span class="change-label" data-role="conversion-label" data-cat="${cat.id}"></span>
               <input type="number" placeholder="ej. 3600" min="0" step="0.01" data-role="mov-conversion-rate" data-cat="${cat.id}">
               <span class="conversion-preview" data-role="conversion-preview" data-cat="${cat.id}"></span>
@@ -2356,7 +2481,8 @@
             <div style="margin-top:10px;">
               ${summaryStats.length ? `<div class="ledger-container">${summaryStats.join('')}</div>` : ''}
             </div>
-            <div style="margin-top:10px; text-align:right;">
+            <div style="margin-top:10px; display:flex; gap:8px; justify-content:flex-end;">
+              <button class="btn-secondary" data-action="archive-category" data-cat="${cat.id}" style="font-size:0.8rem;">Archivar</button>
               <button class="btn-tiny" data-action="delete-category" data-cat="${cat.id}">Eliminar categoría</button>
             </div>
           </div>
@@ -2410,14 +2536,14 @@
         return `
           <div class="transfer-row transfer-row-editing">
             <label>De:</label>
-            <select data-role="edit-transfer-fromcat" data-id="${t.id}">${state.categories.map(c => `<option value="${c.id}" ${c.id === t.fromCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select>
+            <select data-role="edit-transfer-fromcat" data-id="${t.id}">${activeCategories().map(c => `<option value="${c.id}" ${c.id === t.fromCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select>
             <select data-role="edit-transfer-fromcurrency" data-id="${t.id}">
               <option value="COP" ${t.fromCurrency === 'COP' ? 'selected' : ''}>COP</option>
               <option value="USD" ${t.fromCurrency === 'USD' ? 'selected' : ''}>USD</option>
             </select>
             <input type="number" value="${t.fromAmount}" min="0" step="0.01" data-role="edit-transfer-fromamount" data-id="${t.id}">
             <label>A:</label>
-            <select data-role="edit-transfer-tocat" data-id="${t.id}">${state.categories.map(c => `<option value="${c.id}" ${c.id === t.toCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select>
+            <select data-role="edit-transfer-tocat" data-id="${t.id}">${activeCategories().map(c => `<option value="${c.id}" ${c.id === t.toCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select>
             <select data-role="edit-transfer-tocurrency" data-id="${t.id}">
               <option value="COP" ${t.toCurrency === 'COP' ? 'selected' : ''}>COP</option>
               <option value="USD" ${t.toCurrency === 'USD' ? 'selected' : ''}>USD</option>
@@ -2557,11 +2683,11 @@
   const transferConversionNote = document.getElementById('transferConversionNote');
 
   function populateTransferSelects() {
-    const options = state.categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    const options = activeCategories().map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
     transferFromCatEl.innerHTML = options;
     transferToCatEl.innerHTML = options;
     // Default to second category for "to" to avoid same→same
-    if (state.categories.length > 1) transferToCatEl.selectedIndex = 1;
+    if (activeCategories().length > 1) transferToCatEl.selectedIndex = 1;
     updateTransferConversionNote();
   }
 
@@ -2696,10 +2822,11 @@
     const blocks = [];
 
     function categoryOptions() {
-      if (!state.categories.length) {
-        return '<option value="">No hay categorías creadas</option>';
+      const active = activeCategories();
+      if (!active.length) {
+        return '<option value="">No hay categorías activas</option>';
       }
-      return state.categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+      return active.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
     }
 
     [['COP', diffCOP], ['USD', diffUSD]].forEach(([currency, diff]) => {
@@ -2870,6 +2997,26 @@
     }
 
     switch (action) {
+      case 'archive-category': {
+        const catId = e.target.getAttribute('data-cat');
+        const cat = state.categories.find(c => c.id === catId);
+        if (cat) {
+          cat.archived = true;
+          uiState.openCategories[catId] = false;
+          uiState.archiveSectionOpen = true; // open archive so user sees where it went
+          renderAll();
+        }
+        break;
+      }
+      case 'unarchive-category': {
+        const catId = e.target.getAttribute('data-cat');
+        const cat = state.categories.find(c => c.id === catId);
+        if (cat) {
+          cat.archived = false;
+          renderAll();
+        }
+        break;
+      }
       case 'delete-income': {
         const id = e.target.getAttribute('data-id');
         state.incomes = state.incomes.filter(i => i.id !== id);
@@ -3260,7 +3407,12 @@
         // category's budget currency), require a rate before saving.
         if (conversionRow && conversionRow.style.display !== 'none') {
           const budgetCurrency = conversionRow.getAttribute('data-budget-currency');
-          const rate = Number(conversionRateInput.value);
+          let rate = Number(conversionRateInput.value);
+          // Auto-use global rate if the field is empty
+          if ((!rate || rate <= 0) && state.rate) {
+            rate = Number(state.rate);
+            if (conversionRateInput) conversionRateInput.value = rate;
+          }
           if (!rate || rate <= 0) {
             alert('Ingresa la tasa de conversión para este gasto, así sabemos cuánto descontar del presupuesto en ' + (budgetCurrency === 'USD' ? 'dólares' : 'pesos') + '.');
             return;
@@ -3485,6 +3637,14 @@
     };
     reader.readAsText(file);
     importFile.value = '';
+  });
+
+  document.getElementById('archiveSectionHead').addEventListener('click', () => {
+    uiState.archiveSectionOpen = !uiState.archiveSectionOpen;
+    const head = document.getElementById('archiveSectionHead');
+    const body = document.getElementById('archiveBody');
+    head.classList.toggle('open', uiState.archiveSectionOpen);
+    body.classList.toggle('open', uiState.archiveSectionOpen);
   });
 
   // Init
