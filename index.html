@@ -681,6 +681,24 @@
     color: #9b9788;
     margin-left: 4px;
   }
+  .ledger-note {
+    display: block;
+    font-size: 0.7rem;
+    color: #9b9788;
+    margin-top: 1px;
+  }
+  .ledger-balance-wrap {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    justify-content: flex-end;
+    min-width: 90px;
+  }
+  .ledger-balance-wrap .ledger-balance,
+  .ledger-balance-wrap span[class] {
+    font-weight: 600;
+    font-size: 0.82rem;
+  }
   @media (max-width: 500px) {
     .ledger-row { grid-template-columns: 1fr auto; }
     .ledger-amount { display: none; }
@@ -2217,132 +2235,196 @@
         if (remParts.length === 0) remParts.push('<span style="color:#9b9788;">Sin movimientos</span>');
       }
 
-      // Estado de cuenta por moneda — orden cronológico
-      function buildLedger(currency) {
-        const fmtC = (n) => fmt(Math.abs(n), currency);
-        const cls = (n) => n >= 0 ? (currency === 'COP' ? 'cop' : 'usd') : 'neg';
-        const base = currency === 'COP' ? baseBudgetCOP : baseBudgetUSD;
-        if (base === 0 && categoryContributions(cat, currency) === 0 && categoryTransferNet(cat, currency) === 0) return '';
+      // Estado de cuenta unificado — todos los movimientos de la categoría
+      function buildLedger() {
+        const hasBudget = budgetCOP > 0 || budgetUSD > 0;
+        const hasAnything = hasBudget || cat.movements.length > 0 ||
+          (cat.contributions || []).length > 0 ||
+          (state.transfers || []).some(t => t.fromCatId === cat.id || t.toCatId === cat.id);
+        if (!hasAnything) return '';
 
-        // Construir lista unificada de eventos con fecha para ordenar cronológicamente
+        // Construir lista unificada de eventos para ordenar cronológicamente
         const events = [];
 
         // Aportes
-        (cat.contributions || []).filter(c => c.currency === currency).forEach(c => {
+        (cat.contributions || []).forEach(c => {
           events.push({ date: c.date || null, type: 'contrib', data: c });
         });
 
-        // Traslados que afectan esta categoría en esta moneda
+        // Traslados que afectan esta categoría
         (state.transfers || []).forEach(t => {
-          if (t.toCatId === cat.id && t.toCurrency === currency) {
-            events.push({ date: t.date || null, type: 'transfer-in', data: t });
-          }
-          if (t.fromCatId === cat.id && t.fromCurrency === currency) {
-            events.push({ date: t.date || null, type: 'transfer-out', data: t });
-          }
+          if (t.toCatId === cat.id) events.push({ date: t.date || null, type: 'transfer-in', data: t });
+          if (t.fromCatId === cat.id) events.push({ date: t.date || null, type: 'transfer-out', data: t });
         });
 
-        // Gastos
+        // Gastos — todos, sin importar moneda
         cat.movements.forEach((m, idx) => {
-          const impact = m.budgetCurrency
-            ? { currency: m.budgetCurrency, amount: Number(m.budgetAmount) }
-            : { currency: m.currency, amount: Number(m.amount) };
-          if (impact.currency !== currency) return;
-          events.push({ date: m.date || null, arrayIdx: idx, type: 'expense', data: m, impact });
+          events.push({ date: m.date || null, arrayIdx: idx, type: 'expense', data: m });
         });
 
-        // Ordenar: eventos sin fecha van primero (en orden de array),
-        // luego eventos con fecha en orden cronológico
+        // Ordenar cronológicamente (sin fecha primero)
         events.sort((a, b) => {
           if (!a.date && !b.date) return (a.arrayIdx ?? 0) - (b.arrayIdx ?? 0);
-          if (!a.date) return -1; // sin fecha va primero
+          if (!a.date) return -1;
           if (!b.date) return 1;
           return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
         });
 
-        let saldo = base;
+        // Saldos corrientes por moneda
+        let saldoCOP = baseBudgetCOP;
+        let saldoUSD = baseBudgetUSD;
+
+        const fmtSaldo = (n, cur) => {
+          const abs = fmt(Math.abs(n), cur);
+          return n < 0 ? `<span class="ledger-balance neg">-${abs}</span>` : `<span class="ledger-balance ${cur === 'COP' ? 'cop' : 'usd'}">${abs}</span>`;
+        };
+
+        const saldoCell = () => {
+          const parts = [];
+          if (budgetCOP > 0 || saldoCOP !== 0) parts.push(fmtSaldo(saldoCOP, 'COP'));
+          if (budgetUSD > 0 || saldoUSD !== 0) parts.push(fmtSaldo(saldoUSD, 'USD'));
+          return `<span class="ledger-balance-wrap">${parts.join(' ')}</span>`;
+        };
+
         let rows = [];
 
-        // Línea inicial: presupuesto base
-        rows.push(`
-          <div class="ledger-row ledger-base">
-            <span class="ledger-desc">Presupuesto inicial</span>
-            <span class="ledger-amount ${currency === 'COP' ? 'cop' : 'usd'}">+${fmtC(base)}</span>
-            <span class="ledger-balance ${cls(saldo)}">${fmtC(saldo)}</span>
-          </div>
-        `);
+        // Fila inicial si hay presupuesto base
+        if (hasBudget) {
+          const initParts = [];
+          if (budgetCOP > 0) initParts.push(`+${fmt(baseBudgetCOP, 'COP')}`);
+          if (budgetUSD > 0) initParts.push(`+${fmt(baseBudgetUSD, 'USD')}`);
+          rows.push(`
+            <div class="ledger-row ledger-base">
+              <span class="ledger-desc">Presupuesto inicial</span>
+              <span class="ledger-amount">${initParts.join(' · ')}</span>
+              ${saldoCell()}
+            </div>
+          `);
+        }
 
-        // Eventos en orden cronológico
         events.forEach(ev => {
           if (ev.type === 'contrib') {
             const c = ev.data;
-            saldo += Number(c.amount);
+            if (c.currency === 'COP') saldoCOP += Number(c.amount);
+            else saldoUSD += Number(c.amount);
             const dateStr = c.date ? new Date(c.date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' }) : '';
             rows.push(`
               <div class="ledger-row ledger-contrib">
                 <span class="ledger-desc">↑ Aporte: ${escapeHtml(c.desc) || 'Aporte'}${dateStr ? ` <span class="ledger-date">${dateStr}</span>` : ''}</span>
-                <span class="ledger-amount cop">+${fmtC(c.amount)}</span>
-                <span class="ledger-balance ${cls(saldo)}">${fmtC(saldo)}</span>
+                <span class="ledger-amount ${c.currency === 'COP' ? 'cop' : 'usd'}">+${fmt(Number(c.amount), c.currency)}</span>
+                ${saldoCell()}
               </div>
             `);
           } else if (ev.type === 'transfer-in') {
             const t = ev.data;
-            saldo += Number(t.toAmount);
+            if (t.toCurrency === 'COP') saldoCOP += Number(t.toAmount);
+            else saldoUSD += Number(t.toAmount);
             const otherCat = state.categories.find(c => c.id === t.fromCatId);
             const dateStr = new Date(t.date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' });
             rows.push(`
               <div class="ledger-row ledger-transfer-in">
                 <span class="ledger-desc">↓ Traslado desde ${escapeHtml(otherCat?.name || '?')}${t.desc ? ': ' + escapeHtml(t.desc) : ''} <span class="ledger-date">${dateStr}</span></span>
-                <span class="ledger-amount cop">+${fmtC(t.toAmount)}</span>
-                <span class="ledger-balance ${cls(saldo)}">${fmtC(saldo)}</span>
+                <span class="ledger-amount ${t.toCurrency === 'COP' ? 'cop' : 'usd'}">+${fmt(Number(t.toAmount), t.toCurrency)}</span>
+                ${saldoCell()}
               </div>
             `);
           } else if (ev.type === 'transfer-out') {
             const t = ev.data;
-            saldo -= Number(t.fromAmount);
+            if (t.fromCurrency === 'COP') saldoCOP -= Number(t.fromAmount);
+            else saldoUSD -= Number(t.fromAmount);
             const otherCat = state.categories.find(c => c.id === t.toCatId);
             const dateStr = new Date(t.date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' });
             rows.push(`
               <div class="ledger-row ledger-transfer-out">
                 <span class="ledger-desc">↑ Traslado a ${escapeHtml(otherCat?.name || '?')}${t.desc ? ': ' + escapeHtml(t.desc) : ''} <span class="ledger-date">${dateStr}</span></span>
-                <span class="ledger-amount neg">-${fmtC(t.fromAmount)}</span>
-                <span class="ledger-balance ${cls(saldo)}">${fmtC(saldo)}</span>
+                <span class="ledger-amount neg">-${fmt(Number(t.fromAmount), t.fromCurrency)}</span>
+                ${saldoCell()}
               </div>
             `);
           } else if (ev.type === 'expense') {
             const m = ev.data;
-            const impact = ev.impact;
-            saldo -= impact.amount;
+            // El impacto en presupuesto puede ser en moneda distinta (conversión)
+            const impactCur = m.budgetCurrency || m.currency;
+            const impactAmt = m.budgetCurrency ? Number(m.budgetAmount) : Number(m.amount);
+            if (impactCur === 'COP') saldoCOP -= impactAmt;
+            else saldoUSD -= impactAmt;
+
             const dateStr = m.date ? new Date(m.date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' }) : '';
-            const displayAmt = fmtC(impact.amount);
-            rows.push(`
-              <div class="ledger-row ledger-expense">
-                <span class="ledger-desc">− ${escapeHtml(m.desc) || 'Gasto'}${dateStr ? ` <span class="ledger-date">${dateStr}</span>` : ''}</span>
-                <span class="ledger-amount neg">-${displayAmt}</span>
-                <span class="ledger-balance ${cls(saldo)}">${fmtC(saldo)}</span>
-              </div>
-            `);
+
+            // Info adicional: vueltos y conversión
+            const changes = getMovementChanges(m);
+            const changesNote = changes.map(ch => `<span class="ledger-note">Vuelto: +${fmt(Number(ch.amount), ch.currency)}</span>`).join('');
+            const convNote = m.budgetCurrency
+              ? `<span class="ledger-note">${fmt(Number(m.amount), m.currency)} → ${fmt(impactAmt, impactCur)} (tasa ${m.conversionRate})</span>`
+              : (m.currency !== impactCur ? '' : '');
+            const extraNote = (m.currency !== impactCur && !m.budgetCurrency)
+              ? `<span class="ledger-note" style="color:#9b9788;">Solo efectivo, no afecta presupuesto ${impactCur}</span>` : '';
+
+            // Mostrar monto real pagado; si hubo conversión mostrar el impacto presupuestal
+            const amtDisplay = m.budgetCurrency && m.budgetCurrency !== m.currency
+              ? `${fmt(Number(m.amount), m.currency)} <span style="color:#9b9788;font-size:0.75em;">(−${fmt(impactAmt, impactCur)} ppto)</span>`
+              : fmt(Number(m.amount), m.currency);
+
+            if (uiState.editingMovement === m.id) {
+              rows.push(`
+                <div class="ledger-row ledger-expense">
+                  <div class="movement-editing" style="grid-column:1/-1;">
+                    <input type="text" value="${escapeHtml(m.desc)}" data-role="edit-mov-desc" data-cat="${cat.id}" data-mov="${m.id}" placeholder="Descripción">
+                    <input type="number" value="${m.amount}" min="0" step="0.01" data-role="edit-mov-amount" data-cat="${cat.id}" data-mov="${m.id}">
+                    <select data-role="edit-mov-currency" data-cat="${cat.id}" data-mov="${m.id}">
+                      <option value="COP" ${m.currency === 'COP' ? 'selected' : ''}>COP</option>
+                      <option value="USD" ${m.currency === 'USD' ? 'selected' : ''}>USD</option>
+                    </select>
+                    <button class="btn-tiny" data-action="cancel-edit-movement" data-cat="${cat.id}" data-mov="${m.id}">Cancelar</button>
+                    <button class="btn-primary btn-tiny" data-action="save-edit-movement" data-cat="${cat.id}" data-mov="${m.id}">Guardar</button>
+                  </div>
+                </div>
+              `);
+            } else {
+              rows.push(`
+                <div class="ledger-row ledger-expense">
+                  <span class="ledger-desc">
+                    − ${escapeHtml(m.desc) || 'Gasto'}${dateStr ? ` <span class="ledger-date">${dateStr}</span>` : ''}
+                    ${changesNote}${convNote}${extraNote}
+                  </span>
+                  <span class="ledger-amount neg">-${amtDisplay}</span>
+                  <span class="ledger-balance-wrap" style="display:flex;align-items:center;gap:4px;">
+                    ${saldoCell().replace('<span class="ledger-balance-wrap">', '').replace('</span>', '')}
+                    <button class="icon-btn" data-action="edit-movement" data-cat="${cat.id}" data-mov="${m.id}" title="Editar">✎</button>
+                    <button class="btn-tiny" data-action="delete-movement" data-cat="${cat.id}" data-mov="${m.id}">×</button>
+                  </span>
+                </div>
+              `);
+            }
           }
         });
 
-        // Línea de saldo final
+        // Fila de saldo final
+        const finalParts = [];
+        if (budgetCOP > 0) {
+          const cls = saldoCOP < 0 ? 'neg' : 'cop';
+          finalParts.push(`<span class="${cls}">${saldoCOP < 0 ? '-' : ''}${fmt(Math.abs(saldoCOP), 'COP')}</span>`);
+        }
+        if (budgetUSD > 0) {
+          const cls = saldoUSD < 0 ? 'neg' : 'usd';
+          finalParts.push(`<span class="${cls}">${saldoUSD < 0 ? '-' : ''}${fmt(Math.abs(saldoUSD), 'USD')}</span>`);
+        }
         rows.push(`
           <div class="ledger-row ledger-total">
             <span class="ledger-desc">Saldo disponible</span>
             <span class="ledger-amount"></span>
-            <span class="ledger-balance ${cls(saldo)}">${saldo < 0 ? '-' : ''}${fmtC(saldo)}</span>
+            <span class="ledger-balance-wrap">${finalParts.join(' ')}</span>
           </div>
         `);
 
         return `
           <div class="ledger-block">
-            <div class="ledger-currency-label">${currency}</div>
             ${rows.join('')}
           </div>
         `;
       }
 
-      const summaryStats = [buildLedger('COP'), buildLedger('USD')].filter(Boolean);
+      const ledgerHtml = buildLedger();
 
       let alertLine = '';
       // Cuando hay presupuesto en ambas monedas y hay tasa definida,
@@ -2403,10 +2485,7 @@
               </div>
               <button class="btn-secondary" data-action="save-budget" data-cat="${cat.id}">Guardar</button>
             </div>
-            <div class="movements-list">
-              ${movementsHtml}
-              ${transfersHtml}
-            </div>
+            ${ledgerHtml ? `<div class="ledger-container" style="margin-bottom:10px;">${ledgerHtml}</div>` : ''}
             <div class="contributions-block">
               <div class="contributions-header ${isContribOpen ? 'open' : ''}" data-action="toggle-contributions" data-cat="${cat.id}">
                 <span>+ Aportes al presupuesto${(cat.contributions || []).length ? ` (${cat.contributions.length})` : ''}</span>
@@ -2477,9 +2556,6 @@
                 <option value="COP">COP</option>
                 <option value="USD">USD</option>
               </select>
-            </div>
-            <div style="margin-top:10px;">
-              ${summaryStats.length ? `<div class="ledger-container">${summaryStats.join('')}</div>` : ''}
             </div>
             <div style="margin-top:10px; display:flex; gap:8px; justify-content:flex-end;">
               <button class="btn-secondary" data-action="archive-category" data-cat="${cat.id}" style="font-size:0.8rem;">Archivar</button>
