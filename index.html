@@ -1776,7 +1776,8 @@
   }
 
   function budgetSpentTotal(currency) {
-    return activeCategories().reduce((s, c) => s + categorySpent(c, currency), 0);
+    // Incluye archivadas: los gastos ocurrieron aunque la categoría esté archivada
+    return state.categories.reduce((s, c) => s + categorySpent(c, currency), 0);
   }
 
   // "Real spent": actual cash that left your pocket in each currency,
@@ -1788,7 +1789,8 @@
   }
 
   function totalSpent(currency) {
-    return activeCategories().reduce((s, c) => s + realCategorySpent(c, currency), 0);
+    // Incluye archivadas: el efectivo ya salió del bolsillo
+    return state.categories.reduce((s, c) => s + realCategorySpent(c, currency), 0);
   }
 
   // Net effect of currency exchanges on each currency's general pool
@@ -1811,7 +1813,8 @@
 
   function totalChangeReceived(currency) {
     let total = 0;
-    activeCategories().forEach(cat => {
+    // Incluye archivadas: los vueltos recibidos siguen siendo dinero real
+    state.categories.forEach(cat => {
       cat.movements.forEach(m => {
         getMovementChanges(m).forEach(ch => {
           if (ch && ch.currency === currency && Number(ch.amount) > 0) {
@@ -2216,30 +2219,77 @@
 
       const rate = Number(state.rate) || 0;
 
-      const remParts = [];
-      if (budgetCOP > 0) {
-        const equiv = rate > 0 ? ` <span class="equiv-hint">/ ${fmt(remCOP / rate, 'USD')}</span>` : '';
-        remParts.push(`<span class="cop ${remCOP < 0 ? 'neg' : ''}">${fmt(remCOP, 'COP')}${equiv}</span>`);
-      }
-      if (budgetUSD > 0) {
-        const equiv = rate > 0 ? ` <span class="equiv-hint">/ ${fmt(remUSD * rate, 'COP')}</span>` : '';
-        remParts.push(`<span class="usd ${remUSD < 0 ? 'neg' : ''}">${fmt(remUSD, 'USD')}${equiv}</span>`);
+      // Calcular saldo real de cada moneda usando la misma lógica del ledger
+      // (incluye traslados, aportes, cambios internos y todos los gastos reales)
+      function calcRealSaldo(currency) {
+        const base = currency === 'COP' ? baseBudgetCOP : baseBudgetUSD;
+        let saldo = base;
+        // Aportes
+        (cat.contributions || []).filter(c => c.currency === currency).forEach(c => {
+          saldo += Number(c.amount);
+        });
+        // Traslados
+        (state.transfers || []).forEach(t => {
+          if (t.toCatId === cat.id && t.toCurrency === currency) saldo += Number(t.toAmount);
+          if (t.fromCatId === cat.id && t.fromCurrency === currency) saldo -= Number(t.fromAmount);
+        });
+        // Cambios de moneda internos de esta categoría
+        (state.exchanges || []).filter(ex => ex.catId === cat.id).forEach(ex => {
+          if (ex.fromCurrency === currency) saldo -= Number(ex.fromAmount);
+          if (ex.toCurrency === currency) saldo += Number(ex.toAmount);
+        });
+        // Gastos: impacto en presupuesto en esta moneda
+        cat.movements.forEach(m => {
+          const ic = m.budgetCurrency || m.currency;
+          const ia = m.budgetCurrency ? Number(m.budgetAmount) : Number(m.amount);
+          if (ic === currency) saldo -= ia;
+        });
+        // Vueltos recibidos en esta moneda
+        cat.movements.forEach(m => {
+          getMovementChanges(m).forEach(ch => {
+            if (ch.currency === currency) saldo += Number(ch.amount);
+          });
+        });
+        return saldo;
       }
 
-      // Total unificado: solo cuando hay saldo en AMBAS monedas y hay tasa definida
-      if (budgetCOP > 0 && budgetUSD > 0 && rate > 0) {
-        const totalCOP = remCOP + (remUSD * rate);
-        const totalUSD = (remCOP / rate) + remUSD;
+      const realRemCOP = calcRealSaldo('COP');
+      const realRemUSD = calcRealSaldo('USD');
+      const hasCOPActivity = baseBudgetCOP > 0 || categoryContributions(cat,'COP') > 0 || categoryTransferNet(cat,'COP') !== 0 ||
+        (state.exchanges||[]).some(ex => ex.catId === cat.id && (ex.fromCurrency==='COP'||ex.toCurrency==='COP')) ||
+        cat.movements.some(m => (m.budgetCurrency||m.currency)==='COP' || getMovementChanges(m).some(ch=>ch.currency==='COP'));
+      const hasUSDActivity = baseBudgetUSD > 0 || categoryContributions(cat,'USD') > 0 || categoryTransferNet(cat,'USD') !== 0 ||
+        (state.exchanges||[]).some(ex => ex.catId === cat.id && (ex.fromCurrency==='USD'||ex.toCurrency==='USD')) ||
+        cat.movements.some(m => (m.budgetCurrency||m.currency)==='USD' || getMovementChanges(m).some(ch=>ch.currency==='USD'));
+
+      const remParts = [];
+      if (hasCOPActivity) {
+        const equiv = rate > 0 ? ` <span class="equiv-hint">/ ${fmt(realRemCOP / rate, 'USD')}</span>` : '';
+        remParts.push(`<span class="cop ${realRemCOP < 0 ? 'neg' : ''}">${fmt(realRemCOP, 'COP')}${equiv}</span>`);
+      }
+      if (hasUSDActivity) {
+        const equiv = rate > 0 ? ` <span class="equiv-hint">/ ${fmt(realRemUSD * rate, 'COP')}</span>` : '';
+        remParts.push(`<span class="usd ${realRemUSD < 0 ? 'neg' : ''}">${fmt(realRemUSD, 'USD')}${equiv}</span>`);
+      }
+
+      // Total unificado cuando hay actividad en ambas monedas y hay tasa
+      if (hasCOPActivity && hasUSDActivity && rate > 0) {
+        const totalCOP = realRemCOP + (realRemUSD * rate);
+        const totalUSD = (realRemCOP / rate) + realRemUSD;
         const isNeg = totalCOP < 0;
         remParts.push(`<span class="total-equiv ${isNeg ? 'neg' : ''}">= ${fmt(totalCOP, 'COP')} / ${fmt(totalUSD, 'USD')}</span>`);
       }
 
       if (remParts.length === 0) {
-        // no budget — just show what's been spent
         if (spentCOP > 0) remParts.push(`<span class="cop">-${fmt(spentCOP, 'COP')}</span>`);
         if (spentUSD > 0) remParts.push(`<span class="usd">-${fmt(spentUSD, 'USD')}</span>`);
         if (remParts.length === 0) remParts.push('<span style="color:#9b9788;">Sin movimientos</span>');
       }
+
+      // Para la barra de progreso y alertas seguimos usando remCOP/remUSD del presupuesto formal
+      const overCOP2 = budgetCOP > 0 && realRemCOP < 0;
+      const overUSD2 = budgetUSD > 0 && realRemUSD < 0;
+      const isOver2 = overCOP2 || overUSD2;
 
       // Construye el ledger de UNA moneda con sus gastos, traslados y aportes
       function buildLedgerForCurrency(currency) {
@@ -2455,25 +2505,24 @@
       const ledgerHtml = [ledgerCOP, ledgerUSD].filter(Boolean).join('');
 
       let alertLine = '';
-      // Cuando hay presupuesto en ambas monedas y hay tasa definida,
-      // usamos el saldo total combinado para decidir si hay sobregiro real.
-      if (budgetCOP > 0 && budgetUSD > 0 && rate > 0) {
-        const totalRemCOP = remCOP + (remUSD * rate);
-        const totalRemUSD = (remCOP / rate) + remUSD;
+      if (hasCOPActivity && hasUSDActivity && rate > 0) {
+        const totalRemCOP = realRemCOP + (realRemUSD * rate);
+        const totalRemUSD = (realRemCOP / rate) + realRemUSD;
+        const totalBudgetCOP = budgetCOP + budgetUSD * rate;
         if (totalRemCOP < 0) {
-          alertLine = `<div class="alert-line">Presupuesto agotado: te excediste por ${fmt(Math.abs(totalRemCOP), 'COP')} / ${fmt(Math.abs(totalRemUSD), 'USD')} en total (combinando ambas monedas).</div>`;
-        } else if (totalRemCOP / (budgetCOP + budgetUSD * rate) < 0.1) {
+          alertLine = `<div class="alert-line">Presupuesto agotado: te excediste por ${fmt(Math.abs(totalRemCOP), 'COP')} / ${fmt(Math.abs(totalRemUSD), 'USD')} en total.</div>`;
+        } else if (totalBudgetCOP > 0 && totalRemCOP / totalBudgetCOP < 0.1) {
           alertLine = `<div class="alert-line" style="color:var(--accent);">Te queda poco margen en este presupuesto.</div>`;
         }
       } else {
-        // Solo una moneda — lógica original
-        if (overCOP && overUSD) {
-          alertLine = `<div class="alert-line">Presupuesto agotado en ambas monedas: te excediste por ${fmt(Math.abs(remCOP), 'COP')} y ${fmt(Math.abs(remUSD), 'USD')}.</div>`;
-        } else if (overCOP) {
-          alertLine = `<div class="alert-line">Presupuesto en pesos agotado: te excediste por ${fmt(Math.abs(remCOP), 'COP')}.</div>`;
-        } else if (overUSD) {
-          alertLine = `<div class="alert-line">Presupuesto en dólares agotado: te excediste por ${fmt(Math.abs(remUSD), 'USD')}.</div>`;
-        } else if ((budgetCOP > 0 && pctCOP >= 90) || (budgetUSD > 0 && pctUSD >= 90)) {
+        if (overCOP2 && overUSD2) {
+          alertLine = `<div class="alert-line">Presupuesto agotado en ambas monedas: te excediste por ${fmt(Math.abs(realRemCOP), 'COP')} y ${fmt(Math.abs(realRemUSD), 'USD')}.</div>`;
+        } else if (overCOP2) {
+          alertLine = `<div class="alert-line">Presupuesto en pesos agotado: te excediste por ${fmt(Math.abs(realRemCOP), 'COP')}.</div>`;
+        } else if (overUSD2) {
+          alertLine = `<div class="alert-line">Presupuesto en dólares agotado: te excediste por ${fmt(Math.abs(realRemUSD), 'USD')}.</div>`;
+        } else if ((hasCOPActivity && realRemCOP >= 0 && budgetCOP > 0 && realRemCOP / budgetCOP < 0.1) ||
+                   (hasUSDActivity && realRemUSD >= 0 && budgetUSD > 0 && realRemUSD / budgetUSD < 0.1)) {
           alertLine = `<div class="alert-line" style="color:var(--accent);">Te queda poco margen en este presupuesto.</div>`;
         }
       }
@@ -2493,7 +2542,7 @@
             <div class="balances-line">${remParts.join('')}</div>
           </div>
           ${ (budgetCOP > 0 || budgetUSD > 0) ? `
-          <div class="progress-track ${isOver ? 'over' : ''}">
+          <div class="progress-track ${isOver2 ? 'over' : ''}">
             ${budgetCOP > 0 ? `<div class="progress-fill cop" style="width:${pctCOP}%"></div>` : ''}
             ${budgetUSD > 0 ? `<div class="progress-fill usd" style="width:${pctUSD}%"></div>` : ''}
           </div>` : '' }
