@@ -2231,13 +2231,12 @@
 
       return `
         <div class="archived-category-row" style="flex-direction:column; align-items:stretch; padding:0; overflow:hidden;">
-          <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; gap:10px; flex-wrap:wrap; cursor:pointer;"
-               data-action="toggle-archived" data-cat="${cat.id}">
-            <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; gap:10px; flex-wrap:wrap;">
+            <div style="cursor:pointer; flex:1;" data-action="toggle-archived" data-cat="${cat.id}">
               <div class="arch-name">${escapeHtml(cat.name)} <span style="font-size:0.7rem; color:#9b9788; font-weight:400;">${isOpen ? '▾' : '▸'}</span></div>
               <div class="arch-meta">${budgetStr} · ${movCount} movimiento${movCount===1?'':'s'}${spentParts.length?' · '+spentParts.join(' · '):''}</div>
             </div>
-            <div class="arch-actions" onclick="event.stopPropagation()">
+            <div class="arch-actions">
               <button class="btn-secondary" data-action="unarchive-category" data-cat="${cat.id}">Desarchivar</button>
               <button class="btn-tiny" data-action="delete-category" data-cat="${cat.id}">Eliminar</button>
             </div>
@@ -3429,6 +3428,7 @@
         break;
       }
       case 'toggle-archived': {
+        if (e.target.closest('button')) break; // no expandir si clickearon un botón
         const togEl = toggleArchived || e.target.closest('[data-action="toggle-archived"]');
         if (!togEl) break;
         const catId = togEl.getAttribute('data-cat');
