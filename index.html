@@ -2256,7 +2256,9 @@
         const hasEvents = base > 0 || contribs > 0 || transferNet !== 0 ||
           cat.movements.some(m => {
             const ic = m.budgetCurrency || m.currency;
-            return ic === currency;
+            if (ic === currency) return true;
+            // vuelto recibido en esta moneda desde un gasto en otra
+            return getMovementChanges(m).some(ch => ch.currency === currency);
           }) ||
           (cat.contributions || []).some(c => c.currency === currency) ||
           (state.transfers || []).some(t =>
@@ -2287,7 +2289,14 @@
         });
         cat.movements.forEach((m, idx) => {
           const ic = m.budgetCurrency || m.currency;
+          // Gasto que impacta el presupuesto en esta moneda
           if (ic === currency) events.push({ date: m.date || null, arrayIdx: idx, type: 'expense', data: m });
+          // Vuelto recibido en esta moneda (aunque el gasto fue en otra)
+          getMovementChanges(m).forEach(ch => {
+            if (ch.currency === currency) {
+              events.push({ date: m.date || null, arrayIdx: idx, type: 'vuelto', data: m, change: ch });
+            }
+          });
         });
         events.sort((a, b) => {
           if (!a.date && !b.date) return (a.arrayIdx ?? 0) - (b.arrayIdx ?? 0);
@@ -2364,10 +2373,6 @@
             const m = ev.data;
             const impactAmt = m.budgetCurrency ? Number(m.budgetAmount) : Number(m.amount);
             saldo -= impactAmt;
-            const changes = getMovementChanges(m);
-            const changesHtml = changes.map(ch =>
-              `<span class="ledger-note">Vuelto recibido: +${fmt(Number(ch.amount), ch.currency)}</span>`
-            ).join('');
             const convHtml = (m.budgetCurrency && m.budgetCurrency !== m.currency)
               ? `<span class="ledger-note">${fmt(Number(m.amount), m.currency)} pagados → ${fmt(impactAmt, currency)} del presupuesto (tasa ${m.conversionRate})</span>`
               : '';
@@ -2391,7 +2396,7 @@
                 <div class="ledger-row ledger-expense">
                   <span class="ledger-desc">
                     − ${escapeHtml(m.desc) || 'Gasto'}${dateStr ? ` <span class="ledger-date">${dateStr}</span>` : ''}
-                    ${changesHtml}${convHtml}
+                    ${convHtml}
                   </span>
                   <span class="ledger-amount neg">-${fmtC(impactAmt)}</span>
                   <span class="ledger-balance ${balCls(saldo)}" style="display:flex;align-items:center;gap:4px;">
@@ -2401,6 +2406,20 @@
                   </span>
                 </div>`);
             }
+          } else if (ev.type === 'vuelto') {
+            const m = ev.data;
+            const ch = ev.change;
+            saldo += Number(ch.amount);
+            const dateStr = m.date ? new Date(m.date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' }) : '';
+            rows.push(`
+              <div class="ledger-row ledger-contrib" style="background:#f0f8f3;">
+                <span class="ledger-desc">
+                  ↩ Vuelto de "${escapeHtml(m.desc) || 'Gasto'}"${dateStr ? ` <span class="ledger-date">${dateStr}</span>` : ''}
+                  <span class="ledger-note">Recibiste vuelto en ${currency} al pagar en ${m.currency}</span>
+                </span>
+                <span class="ledger-amount ${currency === 'COP' ? 'cop' : 'usd'}">+${fmt(Number(ch.amount), currency)}</span>
+                <span class="ledger-balance ${balCls(saldo)}">${saldo < 0 ? '-' : ''}${fmt(Math.abs(saldo), currency)}</span>
+              </div>`);
           }
         });
 
