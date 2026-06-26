@@ -3311,8 +3311,10 @@
 
   // Delegated clicks for dynamic content
   document.addEventListener('click', (e) => {
-    const action = e.target.getAttribute('data-action')
-      || e.target.closest('[data-action="toggle-archived"]')?.getAttribute('data-action');
+    // Primero el target directo, luego buscar toggle-archived solo si no hay acción directa
+    const directAction = e.target.getAttribute('data-action');
+    const toggleArchived = !directAction && e.target.closest('[data-action="toggle-archived"]');
+    const action = directAction || (toggleArchived ? 'toggle-archived' : null);
     if (!action) {
       if (e.target.matches('[data-role="cat-name-input"]')) return;
       // check if click was on .head but not on a button (toggle open)
@@ -3427,8 +3429,7 @@
         break;
       }
       case 'toggle-archived': {
-        e.stopPropagation();
-        const togEl = e.target.closest('[data-action="toggle-archived"]');
+        const togEl = toggleArchived || e.target.closest('[data-action="toggle-archived"]');
         if (!togEl) break;
         const catId = togEl.getAttribute('data-cat');
         uiState.openCategories['arch-' + catId] = !uiState.openCategories['arch-' + catId];
