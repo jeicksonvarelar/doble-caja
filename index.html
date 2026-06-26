@@ -2106,33 +2106,38 @@
         // Construir lista unificada de eventos con fecha para ordenar cronológicamente
         const events = [];
 
-        // Aportes — usan fecha de creación del id como aproximación; si no tienen fecha, van al principio
+        // Aportes
         (cat.contributions || []).filter(c => c.currency === currency).forEach(c => {
-          events.push({ date: c.date || '0', type: 'contrib', data: c });
+          events.push({ date: c.date || null, type: 'contrib', data: c });
         });
 
         // Traslados que afectan esta categoría en esta moneda
         (state.transfers || []).forEach(t => {
           if (t.toCatId === cat.id && t.toCurrency === currency) {
-            events.push({ date: t.date || '0', type: 'transfer-in', data: t });
+            events.push({ date: t.date || null, type: 'transfer-in', data: t });
           }
           if (t.fromCatId === cat.id && t.fromCurrency === currency) {
-            events.push({ date: t.date || '0', type: 'transfer-out', data: t });
+            events.push({ date: t.date || null, type: 'transfer-out', data: t });
           }
         });
 
-        // Gastos — los movimientos no tienen fecha propia; usamos el orden del array
-        // Les asignamos un índice para mantener su orden relativo cuando no hay fecha
+        // Gastos
         cat.movements.forEach((m, idx) => {
           const impact = m.budgetCurrency
             ? { currency: m.budgetCurrency, amount: Number(m.budgetAmount) }
             : { currency: m.currency, amount: Number(m.amount) };
           if (impact.currency !== currency) return;
-          events.push({ date: m.date || `mov-${String(idx).padStart(6,'0')}`, type: 'expense', data: m, impact });
+          events.push({ date: m.date || null, arrayIdx: idx, type: 'expense', data: m, impact });
         });
 
-        // Ordenar por fecha (los movimientos sin fecha mantienen su orden original por el índice)
-        events.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+        // Ordenar: eventos sin fecha van primero (en orden de array),
+        // luego eventos con fecha en orden cronológico
+        events.sort((a, b) => {
+          if (!a.date && !b.date) return (a.arrayIdx ?? 0) - (b.arrayIdx ?? 0);
+          if (!a.date) return -1; // sin fecha va primero
+          if (!b.date) return 1;
+          return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+        });
 
         let saldo = base;
         let rows = [];
@@ -2188,9 +2193,7 @@
             const impact = ev.impact;
             saldo -= impact.amount;
             const dateStr = m.date ? new Date(m.date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' }) : '';
-            const displayAmt = m.budgetCurrency && m.budgetCurrency !== m.currency
-              ? `${fmtC(impact.amount)} (pagado ${fmt(m.amount, m.currency)})`
-              : fmtC(impact.amount);
+            const displayAmt = fmtC(impact.amount);
             rows.push(`
               <div class="ledger-row ledger-expense">
                 <span class="ledger-desc">− ${escapeHtml(m.desc) || 'Gasto'}${dateStr ? ` <span class="ledger-date">${dateStr}</span>` : ''}</span>
