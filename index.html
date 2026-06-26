@@ -2821,6 +2821,20 @@
         const cat = state.categories.find(c => c.id === ex.catId);
         return cat ? `<span style="color:#9b9788;font-size:0.75rem;"> · desde ${escapeHtml(cat.name)}</span>` : '';
       })() : '';
+
+      if (uiState.editingExchange === ex.id) {
+        return `
+        <div class="exchange-row" style="flex-wrap:wrap; gap:6px;">
+          <div class="movement-editing" style="flex:1; min-width:0;">
+            <input type="number" value="${ex.fromAmount}" min="0" step="0.01" data-role="edit-ex-fromamount" data-id="${ex.id}" style="width:80px;" placeholder="Monto">
+            <input type="number" value="${ex.rate}" min="0" step="0.01" data-role="edit-ex-rate" data-id="${ex.id}" style="width:80px;" placeholder="Tasa">
+            <input type="text" value="${escapeHtml(ex.desc||'')}" data-role="edit-ex-desc" data-id="${ex.id}" placeholder="Descripción (opcional)" style="flex:1; min-width:120px;">
+            <button class="btn-tiny" data-action="cancel-edit-exchange" data-id="${ex.id}">Cancelar</button>
+            <button class="btn-primary btn-tiny" data-action="save-edit-exchange" data-id="${ex.id}">Guardar</button>
+          </div>
+        </div>`;
+      }
+
       return `
       <div class="exchange-row">
         <span class="desc">
@@ -2831,7 +2845,10 @@
           ${descStr}${catRef}
           ${dateStr ? `<span style="color:#9b9788;font-size:0.75rem;"> · ${dateStr}</span>` : ''}
         </span>
-        <button class="btn-tiny" data-action="delete-exchange" data-id="${ex.id}">Eliminar</button>
+        <span style="display:flex;gap:6px;align-items:center;">
+          <button class="icon-btn" style="font-size:0.8rem;padding:2px 5px;" data-action="edit-exchange" data-id="${ex.id}" title="Editar">✎</button>
+          <button class="btn-tiny" data-action="delete-exchange" data-id="${ex.id}">Eliminar</button>
+        </span>
       </div>
     `}).join('');
   }
@@ -3294,7 +3311,8 @@
 
   // Delegated clicks for dynamic content
   document.addEventListener('click', (e) => {
-    const action = e.target.getAttribute('data-action');
+    const action = e.target.getAttribute('data-action')
+      || e.target.closest('[data-action="toggle-archived"]')?.getAttribute('data-action');
     if (!action) {
       if (e.target.matches('[data-role="cat-name-input"]')) return;
       // check if click was on .head but not on a button (toggle open)
