@@ -681,6 +681,12 @@
     color: #9b9788;
     margin-left: 4px;
   }
+  .ledger-exchange { background: #fff8f0; }
+  .ledger-exchange-btn-row {
+    padding: 8px 12px;
+    background: var(--paper-2);
+    border-top: 1px dashed var(--line);
+  }
   .ledger-note {
     display: block;
     font-size: 0.7rem;
@@ -2235,34 +2241,54 @@
         if (remParts.length === 0) remParts.push('<span style="color:#9b9788;">Sin movimientos</span>');
       }
 
-      // Estado de cuenta unificado — todos los movimientos de la categoría
-      function buildLedger() {
-        const hasBudget = budgetCOP > 0 || budgetUSD > 0;
-        const hasAnything = hasBudget || cat.movements.length > 0 ||
-          (cat.contributions || []).length > 0 ||
-          (state.transfers || []).some(t => t.fromCatId === cat.id || t.toCatId === cat.id);
-        if (!hasAnything) return '';
+      // Construye el ledger de UNA moneda con sus gastos, traslados y aportes
+      function buildLedgerForCurrency(currency) {
+        const base = currency === 'COP' ? baseBudgetCOP : baseBudgetUSD;
+        const contribs = categoryContributions(cat, currency);
+        const transferNet = categoryTransferNet(cat, currency);
 
-        // Construir lista unificada de eventos para ordenar cronológicamente
+        // Recopilar cambios de moneda que afectan esta categoría en esta divisa
+        const catExchanges = (state.exchanges || []).filter(ex =>
+          ex.catId === cat.id && (ex.fromCurrency === currency || ex.toCurrency === currency)
+        );
+
+        // ¿Hay algo que mostrar?
+        const hasEvents = base > 0 || contribs > 0 || transferNet !== 0 ||
+          cat.movements.some(m => {
+            const ic = m.budgetCurrency || m.currency;
+            return ic === currency;
+          }) ||
+          (cat.contributions || []).some(c => c.currency === currency) ||
+          (state.transfers || []).some(t =>
+            (t.toCatId === cat.id && t.toCurrency === currency) ||
+            (t.fromCatId === cat.id && t.fromCurrency === currency)
+          ) ||
+          catExchanges.length > 0;
+
+        if (!hasEvents) return '';
+
+        const fmtC = n => fmt(Math.abs(n), currency);
+        const balCls = n => n >= 0 ? (currency === 'COP' ? 'cop' : 'usd') : 'neg';
+
+        // Construir eventos ordenados por fecha
         const events = [];
-
-        // Aportes
-        (cat.contributions || []).forEach(c => {
+        (cat.contributions || []).filter(c => c.currency === currency).forEach(c => {
           events.push({ date: c.date || null, type: 'contrib', data: c });
         });
-
-        // Traslados que afectan esta categoría
         (state.transfers || []).forEach(t => {
-          if (t.toCatId === cat.id) events.push({ date: t.date || null, type: 'transfer-in', data: t });
-          if (t.fromCatId === cat.id) events.push({ date: t.date || null, type: 'transfer-out', data: t });
+          if (t.toCatId === cat.id && t.toCurrency === currency)
+            events.push({ date: t.date || null, type: 'transfer-in', data: t });
+          if (t.fromCatId === cat.id && t.fromCurrency === currency)
+            events.push({ date: t.date || null, type: 'transfer-out', data: t });
         });
-
-        // Gastos — todos, sin importar moneda
+        // Cambios de moneda que afectan esta divisa en esta categoría
+        catExchanges.forEach(ex => {
+          events.push({ date: ex.date || null, type: 'cat-exchange', data: ex });
+        });
         cat.movements.forEach((m, idx) => {
-          events.push({ date: m.date || null, arrayIdx: idx, type: 'expense', data: m });
+          const ic = m.budgetCurrency || m.currency;
+          if (ic === currency) events.push({ date: m.date || null, arrayIdx: idx, type: 'expense', data: m });
         });
-
-        // Ordenar cronológicamente (sin fecha primero)
         events.sort((a, b) => {
           if (!a.date && !b.date) return (a.arrayIdx ?? 0) - (b.arrayIdx ?? 0);
           if (!a.date) return -1;
@@ -2270,105 +2296,86 @@
           return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
         });
 
-        // Saldos corrientes por moneda
-        let saldoCOP = baseBudgetCOP;
-        let saldoUSD = baseBudgetUSD;
+        let saldo = base;
+        const rows = [];
 
-        const fmtSaldo = (n, cur) => {
-          const abs = fmt(Math.abs(n), cur);
-          return n < 0 ? `<span class="ledger-balance neg">-${abs}</span>` : `<span class="ledger-balance ${cur === 'COP' ? 'cop' : 'usd'}">${abs}</span>`;
-        };
-
-        const saldoCell = () => {
-          const parts = [];
-          if (budgetCOP > 0 || saldoCOP !== 0) parts.push(fmtSaldo(saldoCOP, 'COP'));
-          if (budgetUSD > 0 || saldoUSD !== 0) parts.push(fmtSaldo(saldoUSD, 'USD'));
-          return `<span class="ledger-balance-wrap">${parts.join(' ')}</span>`;
-        };
-
-        let rows = [];
-
-        // Fila inicial si hay presupuesto base
-        if (hasBudget) {
-          const initParts = [];
-          if (budgetCOP > 0) initParts.push(`+${fmt(baseBudgetCOP, 'COP')}`);
-          if (budgetUSD > 0) initParts.push(`+${fmt(baseBudgetUSD, 'USD')}`);
-          rows.push(`
-            <div class="ledger-row ledger-base">
-              <span class="ledger-desc">Presupuesto inicial</span>
-              <span class="ledger-amount">${initParts.join(' · ')}</span>
-              ${saldoCell()}
-            </div>
-          `);
-        }
+        // Fila de presupuesto inicial
+        rows.push(`
+          <div class="ledger-row ledger-base">
+            <span class="ledger-desc">Presupuesto inicial</span>
+            <span class="ledger-amount ${currency === 'COP' ? 'cop' : 'usd'}">+${fmtC(base)}</span>
+            <span class="ledger-balance ${balCls(saldo)}">${fmtC(saldo)}</span>
+          </div>`);
 
         events.forEach(ev => {
+          const dateStr = ev.date ? new Date(ev.date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' }) : '';
+
           if (ev.type === 'contrib') {
             const c = ev.data;
-            if (c.currency === 'COP') saldoCOP += Number(c.amount);
-            else saldoUSD += Number(c.amount);
-            const dateStr = c.date ? new Date(c.date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' }) : '';
+            saldo += Number(c.amount);
             rows.push(`
               <div class="ledger-row ledger-contrib">
                 <span class="ledger-desc">↑ Aporte: ${escapeHtml(c.desc) || 'Aporte'}${dateStr ? ` <span class="ledger-date">${dateStr}</span>` : ''}</span>
-                <span class="ledger-amount ${c.currency === 'COP' ? 'cop' : 'usd'}">+${fmt(Number(c.amount), c.currency)}</span>
-                ${saldoCell()}
-              </div>
-            `);
+                <span class="ledger-amount ${currency === 'COP' ? 'cop' : 'usd'}">+${fmtC(c.amount)}</span>
+                <span class="ledger-balance ${balCls(saldo)}">${fmtC(saldo)}</span>
+              </div>`);
+
           } else if (ev.type === 'transfer-in') {
             const t = ev.data;
-            if (t.toCurrency === 'COP') saldoCOP += Number(t.toAmount);
-            else saldoUSD += Number(t.toAmount);
-            const otherCat = state.categories.find(c => c.id === t.fromCatId);
-            const dateStr = new Date(t.date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' });
+            saldo += Number(t.toAmount);
+            const other = state.categories.find(c => c.id === t.fromCatId);
             rows.push(`
               <div class="ledger-row ledger-transfer-in">
-                <span class="ledger-desc">↓ Traslado desde ${escapeHtml(otherCat?.name || '?')}${t.desc ? ': ' + escapeHtml(t.desc) : ''} <span class="ledger-date">${dateStr}</span></span>
-                <span class="ledger-amount ${t.toCurrency === 'COP' ? 'cop' : 'usd'}">+${fmt(Number(t.toAmount), t.toCurrency)}</span>
-                ${saldoCell()}
-              </div>
-            `);
+                <span class="ledger-desc">↓ Traslado desde ${escapeHtml(other?.name || '?')}${t.desc ? ': ' + escapeHtml(t.desc) : ''} <span class="ledger-date">${dateStr}</span></span>
+                <span class="ledger-amount ${currency === 'COP' ? 'cop' : 'usd'}">+${fmtC(t.toAmount)}</span>
+                <span class="ledger-balance ${balCls(saldo)}">${fmtC(saldo)}</span>
+              </div>`);
+
           } else if (ev.type === 'transfer-out') {
             const t = ev.data;
-            if (t.fromCurrency === 'COP') saldoCOP -= Number(t.fromAmount);
-            else saldoUSD -= Number(t.fromAmount);
-            const otherCat = state.categories.find(c => c.id === t.toCatId);
-            const dateStr = new Date(t.date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' });
+            saldo -= Number(t.fromAmount);
+            const other = state.categories.find(c => c.id === t.toCatId);
             rows.push(`
               <div class="ledger-row ledger-transfer-out">
-                <span class="ledger-desc">↑ Traslado a ${escapeHtml(otherCat?.name || '?')}${t.desc ? ': ' + escapeHtml(t.desc) : ''} <span class="ledger-date">${dateStr}</span></span>
-                <span class="ledger-amount neg">-${fmt(Number(t.fromAmount), t.fromCurrency)}</span>
-                ${saldoCell()}
-              </div>
-            `);
+                <span class="ledger-desc">↑ Traslado a ${escapeHtml(other?.name || '?')}${t.desc ? ': ' + escapeHtml(t.desc) : ''} <span class="ledger-date">${dateStr}</span></span>
+                <span class="ledger-amount neg">-${fmtC(t.fromAmount)}</span>
+                <span class="ledger-balance ${balCls(saldo)}">${fmtC(saldo)}</span>
+              </div>`);
+
+          } else if (ev.type === 'cat-exchange') {
+            const ex = ev.data;
+            const isOut = ex.fromCurrency === currency;
+            const amt = isOut ? Number(ex.fromAmount) : Number(ex.toAmount);
+            if (isOut) saldo -= amt; else saldo += amt;
+            const otherCur = isOut ? ex.toCurrency : ex.fromCurrency;
+            const otherAmt = isOut ? Number(ex.toAmount) : Number(ex.fromAmount);
+            const sign = isOut ? '-' : '+';
+            const desc = isOut
+              ? `⇄ Cambio a ${otherCur}: ${fmt(otherAmt, otherCur)} (tasa ${ex.rate})`
+              : `⇄ Cambio desde ${otherCur}: ${fmt(otherAmt, otherCur)} (tasa ${ex.rate})`;
+            rows.push(`
+              <div class="ledger-row ledger-exchange">
+                <span class="ledger-desc">${desc}${dateStr ? ` <span class="ledger-date">${dateStr}</span>` : ''}</span>
+                <span class="ledger-amount ${isOut ? 'neg' : (currency === 'COP' ? 'cop' : 'usd')}">${sign}${fmtC(amt)}</span>
+                <span class="ledger-balance ${balCls(saldo)}">${saldo < 0 ? '-' : ''}${fmtC(saldo)}</span>
+              </div>`);
+
           } else if (ev.type === 'expense') {
             const m = ev.data;
-            // El impacto en presupuesto puede ser en moneda distinta (conversión)
-            const impactCur = m.budgetCurrency || m.currency;
             const impactAmt = m.budgetCurrency ? Number(m.budgetAmount) : Number(m.amount);
-            if (impactCur === 'COP') saldoCOP -= impactAmt;
-            else saldoUSD -= impactAmt;
-
-            const dateStr = m.date ? new Date(m.date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' }) : '';
-
-            // Info adicional: vueltos y conversión
+            saldo -= impactAmt;
             const changes = getMovementChanges(m);
-            const changesNote = changes.map(ch => `<span class="ledger-note">Vuelto: +${fmt(Number(ch.amount), ch.currency)}</span>`).join('');
-            const convNote = m.budgetCurrency
-              ? `<span class="ledger-note">${fmt(Number(m.amount), m.currency)} → ${fmt(impactAmt, impactCur)} (tasa ${m.conversionRate})</span>`
-              : (m.currency !== impactCur ? '' : '');
-            const extraNote = (m.currency !== impactCur && !m.budgetCurrency)
-              ? `<span class="ledger-note" style="color:#9b9788;">Solo efectivo, no afecta presupuesto ${impactCur}</span>` : '';
-
-            // Mostrar monto real pagado; si hubo conversión mostrar el impacto presupuestal
-            const amtDisplay = m.budgetCurrency && m.budgetCurrency !== m.currency
-              ? `${fmt(Number(m.amount), m.currency)} <span style="color:#9b9788;font-size:0.75em;">(−${fmt(impactAmt, impactCur)} ppto)</span>`
-              : fmt(Number(m.amount), m.currency);
+            const changesHtml = changes.map(ch =>
+              `<span class="ledger-note">Vuelto recibido: +${fmt(Number(ch.amount), ch.currency)}</span>`
+            ).join('');
+            const convHtml = (m.budgetCurrency && m.budgetCurrency !== m.currency)
+              ? `<span class="ledger-note">${fmt(Number(m.amount), m.currency)} pagados → ${fmt(impactAmt, currency)} del presupuesto (tasa ${m.conversionRate})</span>`
+              : '';
 
             if (uiState.editingMovement === m.id) {
               rows.push(`
                 <div class="ledger-row ledger-expense">
-                  <div class="movement-editing" style="grid-column:1/-1;">
+                  <div class="movement-editing" style="grid-column:1/-1; padding:4px 0;">
                     <input type="text" value="${escapeHtml(m.desc)}" data-role="edit-mov-desc" data-cat="${cat.id}" data-mov="${m.id}" placeholder="Descripción">
                     <input type="number" value="${m.amount}" min="0" step="0.01" data-role="edit-mov-amount" data-cat="${cat.id}" data-mov="${m.id}">
                     <select data-role="edit-mov-currency" data-cat="${cat.id}" data-mov="${m.id}">
@@ -2378,53 +2385,55 @@
                     <button class="btn-tiny" data-action="cancel-edit-movement" data-cat="${cat.id}" data-mov="${m.id}">Cancelar</button>
                     <button class="btn-primary btn-tiny" data-action="save-edit-movement" data-cat="${cat.id}" data-mov="${m.id}">Guardar</button>
                   </div>
-                </div>
-              `);
+                </div>`);
             } else {
               rows.push(`
                 <div class="ledger-row ledger-expense">
                   <span class="ledger-desc">
                     − ${escapeHtml(m.desc) || 'Gasto'}${dateStr ? ` <span class="ledger-date">${dateStr}</span>` : ''}
-                    ${changesNote}${convNote}${extraNote}
+                    ${changesHtml}${convHtml}
                   </span>
-                  <span class="ledger-amount neg">-${amtDisplay}</span>
-                  <span class="ledger-balance-wrap" style="display:flex;align-items:center;gap:4px;">
-                    ${saldoCell().replace('<span class="ledger-balance-wrap">', '').replace('</span>', '')}
-                    <button class="icon-btn" data-action="edit-movement" data-cat="${cat.id}" data-mov="${m.id}" title="Editar">✎</button>
+                  <span class="ledger-amount neg">-${fmtC(impactAmt)}</span>
+                  <span class="ledger-balance ${balCls(saldo)}" style="display:flex;align-items:center;gap:4px;">
+                    ${saldo < 0 ? '-' : ''}${fmtC(saldo)}
+                    <button class="icon-btn" style="font-size:0.8rem;padding:2px 5px;" data-action="edit-movement" data-cat="${cat.id}" data-mov="${m.id}" title="Editar">✎</button>
                     <button class="btn-tiny" data-action="delete-movement" data-cat="${cat.id}" data-mov="${m.id}">×</button>
                   </span>
-                </div>
-              `);
+                </div>`);
             }
           }
         });
 
         // Fila de saldo final
-        const finalParts = [];
-        if (budgetCOP > 0) {
-          const cls = saldoCOP < 0 ? 'neg' : 'cop';
-          finalParts.push(`<span class="${cls}">${saldoCOP < 0 ? '-' : ''}${fmt(Math.abs(saldoCOP), 'COP')}</span>`);
-        }
-        if (budgetUSD > 0) {
-          const cls = saldoUSD < 0 ? 'neg' : 'usd';
-          finalParts.push(`<span class="${cls}">${saldoUSD < 0 ? '-' : ''}${fmt(Math.abs(saldoUSD), 'USD')}</span>`);
-        }
         rows.push(`
           <div class="ledger-row ledger-total">
             <span class="ledger-desc">Saldo disponible</span>
             <span class="ledger-amount"></span>
-            <span class="ledger-balance-wrap">${finalParts.join(' ')}</span>
-          </div>
-        `);
+            <span class="ledger-balance ${balCls(saldo)}">${saldo < 0 ? '-' : ''}${fmtC(saldo)}</span>
+          </div>`);
+
+        // Botón de cambio de moneda al pie (solo si hay saldo positivo y la otra moneda existe en esta categoría)
+        const otherCurrency = currency === 'COP' ? 'USD' : 'COP';
+        const otherBudget = otherCurrency === 'COP' ? budgetCOP : budgetUSD;
+        const exchangeBtn = (otherBudget > 0 && saldo > 0)
+          ? `<div class="ledger-exchange-btn-row">
+               <button class="btn-secondary" style="font-size:0.78rem;" data-action="cat-exchange" data-cat="${cat.id}" data-from="${currency}" data-to="${otherCurrency}">
+                 ⇄ Cambiar ${currency} → ${otherCurrency}
+               </button>
+             </div>`
+          : '';
 
         return `
           <div class="ledger-block">
+            <div class="ledger-currency-label">${currency}</div>
             ${rows.join('')}
-          </div>
-        `;
+            ${exchangeBtn}
+          </div>`;
       }
 
-      const ledgerHtml = buildLedger();
+      const ledgerCOP = buildLedgerForCurrency('COP');
+      const ledgerUSD = buildLedgerForCurrency('USD');
+      const ledgerHtml = [ledgerCOP, ledgerUSD].filter(Boolean).join('');
 
       let alertLine = '';
       // Cuando hay presupuesto en ambas monedas y hay tasa definida,
@@ -3073,6 +3082,48 @@
     }
 
     switch (action) {
+      case 'cat-exchange': {
+        e.stopPropagation();
+        const catId = e.target.getAttribute('data-cat');
+        const fromCur = e.target.getAttribute('data-from');
+        const toCur = e.target.getAttribute('data-to');
+        const defaultRate = state.rate ? String(state.rate) : '';
+        const rateVal = prompt(
+          `¿A qué tasa cambias de ${fromCur} a ${toCur}? (1 USD = X COP)`,
+          defaultRate
+        );
+        if (rateVal === null) break;
+        const rate = Number(rateVal);
+        if (!rate || rate <= 0) { alert('Tasa inválida.'); break; }
+
+        const amtVal = prompt(
+          `¿Cuántos ${fromCur} vas a cambiar?`,
+          ''
+        );
+        if (amtVal === null) break;
+        const fromAmount = Number(amtVal);
+        if (!fromAmount || fromAmount <= 0) { alert('Monto inválido.'); break; }
+
+        const toAmount = fromCur === 'USD' ? fromAmount * rate : fromAmount / rate;
+
+        // Registrar como cambio de moneda global (afecta balances generales)
+        // y marcarlo con catId para que aparezca en el ledger de la categoría
+        if (!state.exchanges) state.exchanges = [];
+        state.exchanges.push({
+          id: uid(),
+          date: new Date().toISOString(),
+          fromAmount,
+          fromCurrency: fromCur,
+          toAmount,
+          toCurrency: toCur,
+          rate,
+          catId  // referencia a la categoría donde se originó
+        });
+
+        uiState.openCategories[catId] = true;
+        renderAll();
+        break;
+      }
       case 'archive-category': {
         const catId = e.target.getAttribute('data-cat');
         const cat = state.categories.find(c => c.id === catId);
@@ -3095,6 +3146,9 @@
       }
       case 'delete-income': {
         const id = e.target.getAttribute('data-id');
+        const inc = state.incomes.find(i => i.id === id);
+        const label = inc ? `"${inc.desc || 'Ingreso'}" (${fmt(Number(inc.amount), inc.currency)})` : 'este ingreso';
+        if (!confirm(`¿Eliminar ${label}?`)) break;
         state.incomes = state.incomes.filter(i => i.id !== id);
         renderAll();
         break;
@@ -3131,12 +3185,22 @@
       }
       case 'delete-exchange': {
         const id = e.target.getAttribute('data-id');
+        const ex = state.exchanges.find(e => e.id === id);
+        const label = ex ? `el cambio de ${fmt(Number(ex.fromAmount), ex.fromCurrency)} → ${fmt(Number(ex.toAmount), ex.toCurrency)}` : 'este cambio de moneda';
+        if (!confirm(`¿Eliminar ${label}?`)) break;
         state.exchanges = state.exchanges.filter(ex => ex.id !== id);
         renderAll();
         break;
       }
       case 'delete-transfer': {
         const id = e.target.getAttribute('data-id');
+        const tr = (state.transfers || []).find(t => t.id === id);
+        const fromCat = tr ? state.categories.find(c => c.id === tr.fromCatId) : null;
+        const toCat = tr ? state.categories.find(c => c.id === tr.toCatId) : null;
+        const label = tr
+          ? `el traslado de ${fmt(Number(tr.fromAmount), tr.fromCurrency)} (${fromCat?.name || '?'} → ${toCat?.name || '?'})`
+          : 'este traslado';
+        if (!confirm(`¿Eliminar ${label}?`)) break;
         state.transfers = (state.transfers || []).filter(t => t.id !== id);
         renderAll();
         break;
@@ -3194,16 +3258,20 @@
       }
       case 'delete-reconcile': {
         const id = e.target.getAttribute('data-id');
+        const rec = state.reconciliations.find(r => r.id === id);
+        const dateLabel = rec ? new Date(rec.date).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+        if (!confirm(`¿Eliminar la conciliación del ${dateLabel}?`)) break;
         state.reconciliations = state.reconciliations.filter(r => r.id !== id);
         renderAll();
         break;
       }
       case 'delete-category': {
         const catId = e.target.getAttribute('data-cat');
-        if (confirm('¿Eliminar esta categoría y todos sus gastos registrados?')) {
-          state.categories = state.categories.filter(c => c.id !== catId);
-          renderAll();
-        }
+        const cat = state.categories.find(c => c.id === catId);
+        const label = cat ? `la categoría "${cat.name}"` : 'esta categoría';
+        if (!confirm(`¿Eliminar ${label} y todos sus gastos registrados? Esta acción no se puede deshacer.`)) break;
+        state.categories = state.categories.filter(c => c.id !== catId);
+        renderAll();
         break;
       }
       case 'edit-name': {
@@ -3245,6 +3313,9 @@
         const catId = e.target.getAttribute('data-cat');
         const movId = e.target.getAttribute('data-mov');
         const cat = state.categories.find(c => c.id === catId);
+        const mov = cat && cat.movements.find(m => m.id === movId);
+        const label = mov ? `el gasto "${mov.desc || 'Gasto'}" (${fmt(Number(mov.amount), mov.currency)})` : 'este gasto';
+        if (!confirm(`¿Eliminar ${label}?`)) break;
         if (cat) {
           cat.movements = cat.movements.filter(m => m.id !== movId);
           uiState.openCategories[catId] = true;
@@ -3373,6 +3444,9 @@
         const catId = e.target.getAttribute('data-cat');
         const contribId = e.target.getAttribute('data-contrib');
         const cat = state.categories.find(c => c.id === catId);
+        const contrib = cat && cat.contributions && cat.contributions.find(c => c.id === contribId);
+        const label = contrib ? `el aporte "${contrib.desc || 'Aporte'}" (${fmt(Number(contrib.amount), contrib.currency)})` : 'este aporte';
+        if (!confirm(`¿Eliminar ${label}?`)) break;
         if (cat && cat.contributions) {
           cat.contributions = cat.contributions.filter(c => c.id !== contribId);
           uiState.openCategories[catId] = true;
